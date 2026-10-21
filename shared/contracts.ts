@@ -5,18 +5,17 @@ import { z } from 'zod'
 /** Keys are what sites look a text up by: words joined by dots, such as checkout.pay.button. They
  *  are addresses, so they never change once made. The first character is never _ or -, which the
  *  admin's own pages (_new) start with. */
-export const KEY = /^[A-Za-z0-9][A-Za-z0-9_-]*(?:\.[A-Za-z0-9_-]+)*$/
-export const isKey = (value: unknown): value is string =>
-  typeof value === 'string' && value.length <= 120 && KEY.test(value)
 export const keySchema = z
   .string()
   .max(120)
-  .regex(KEY, 'Use letters, digits, _ and -, in parts joined by dots.')
+  .regex(
+    /^[A-Za-z0-9][A-Za-z0-9_-]*(?:\.[A-Za-z0-9_-]+)*$/,
+    'Use letters, digits, _ and -, in parts joined by dots.',
+  )
+export const isKey = (value: unknown): value is string => keySchema.safeParse(value).success
 
 /** Languages by their tag: en, de, pt-BR. */
 export const LOCALE = /^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/
-export const isLocale = (value: unknown): value is string =>
-  typeof value === 'string' && LOCALE.test(value)
 export const localeSchema = z.string().regex(LOCALE, 'Use a language tag, such as en, de or pt-BR.')
 
 /** A language to add, or to make the source. */
@@ -119,8 +118,6 @@ export type Snapshot = Record<string, Record<string, string>>
 
 /** A project's translations, as its admin page shows them. */
 export interface TranslationSpace {
-  projectId: string
-  name: string
   token: string
   source: string
   /** Every language worked in, the source first. */

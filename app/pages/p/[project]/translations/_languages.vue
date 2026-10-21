@@ -6,7 +6,7 @@ import type { TranslationSpace } from '../../../../../shared/contracts'
 // offline before it can be removed, and the source changes on its own. Sites see none of it until
 // the next publish.
 const project = useProject().id.value
-useHead({ title: `Languages · ${useRuntimeConfig().public.nexitas.name}` })
+useHead({ title: `Languages · ${project}` })
 const base = `/api/p/${project}/translations`
 const { data: space, error: loadError, refresh } = await useFetch<TranslationSpace>(base)
 useLive(refresh)
@@ -14,25 +14,19 @@ useLive(refresh)
 const filled = (locale: string) => space.value?.keys.filter((key) => key.texts[locale]).length ?? 0
 const delivered = (locale: string) => space.value?.delivered.includes(locale) ?? false
 
-const error = ref('')
+const { pending, error, issues, fieldError, submit } = useSubmit()
 async function send(path: string, body: object) {
-  error.value = ''
-  try {
+  const done = await submit(async () => {
     await $fetch(`${base}/languages${path}`, { method: 'POST', body })
     await refresh()
     return true
-  } catch (cause) {
-    error.value = errorMessage(cause)
-    return false
-  }
+  })
+  return !!done
 }
 
 const locale = ref('')
-const adding = ref(false)
 async function add() {
-  adding.value = true
   if (await send('', { locale: locale.value.trim() })) locale.value = ''
-  adding.value = false
 }
 
 // The steps a site would notice, or that change every translation, are confirmed first.
@@ -89,15 +83,23 @@ function confirm() {
             <tr v-for="l in space.locales" :key="l">
               <td class="font-mono weight-600">{{ l }}</td>
               <td class="text-s">
-                <span v-if="l === space.source">Source</span>
-                <span v-else-if="space.live.includes(l)" class="text-success">Live</span>
-                <span v-else class="text-muted">Draft</span>
-                <span v-if="space.live.includes(l) && !delivered(l)" class="text-muted">
-                  · delivered from the next publish</span
-                >
-                <span v-if="!space.live.includes(l) && delivered(l)" class="text-warning">
-                  · sites get it until the next publish</span
-                >
+                <span class="cluster gap-1 flex-nowrap">
+                  <span
+                    class="dot"
+                    :data-tone="
+                      space.live.includes(l) ? 'success' : delivered(l) ? 'warning' : undefined
+                    "
+                    aria-hidden="true"
+                  ></span>
+                  <span
+                    >{{ l === space.source ? 'Source' : space.live.includes(l) ? 'Live' : 'Draft'
+                    }}<span v-if="space.live.includes(l) && !delivered(l)" class="text-muted">
+                      · delivered from the next publish</span
+                    ><span v-if="!space.live.includes(l) && delivered(l)">
+                      · sites get it until the next publish</span
+                    ></span
+                  >
+                </span>
               </td>
               <td data-num>{{ filled(l) }} of {{ space.keys.length }}</td>
               <td>
@@ -148,9 +150,7 @@ function confirm() {
           </tbody>
         </table>
       </div>
-      <div v-if="error" class="alert" data-tone="danger" role="alert">
-        <div><strong>Could not change the languages.</strong> {{ error }}</div>
-      </div>
+      <FormIssues :error="error" :issues="issues" failed="Could not change the languages." />
 
       <form class="stack gap-3 measure" @submit.prevent="add">
         <div class="field">
@@ -159,23 +159,27 @@ function confirm() {
             id="locale"
             v-model="locale"
             class="input font-mono text-s"
+            data-size="s"
             required
             maxlength="35"
             autocomplete="off"
             spellcheck="false"
+            :aria-invalid="!!fieldError('locale') || undefined"
             aria-describedby="locale-help"
           />
           <small id="locale-help"
             >A language tag, such as de, fr or pt-BR. It starts as a draft.</small
           >
+          <span v-if="fieldError('locale')" data-error>{{ fieldError('locale') }}</span>
         </div>
-        <div class="cluster gap-3">
+        <div class="cluster gap-3 hairline-t pt-5">
           <button
             type="submit"
             class="btn end"
             data-size="s"
-            :disabled="adding"
-            :aria-busy="adding || undefined"
+            data-variant="primary"
+            :disabled="pending"
+            :aria-busy="pending || undefined"
           >
             Add language
           </button>

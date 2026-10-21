@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { errorMessage } from '#nexitas/app/lib/format'
 import { CHECKS, audit, type TextKey } from '../../shared/contracts'
 
 /** Writes a new key, or edits `textKey`: its note and a text per language, the source first. Each
@@ -47,30 +46,18 @@ function canConfirm(locale: string) {
   )
 }
 
-const pending = ref(false)
-const error = ref('')
-const issues = ref<{ path: string; message: string }[]>([])
-const fieldError = (path: string) => issues.value.find((issue) => issue.path === path)?.message
+const { pending, error, issues, fieldError, submit } = useSubmit()
 
 async function save() {
-  pending.value = true
-  error.value = ''
-  issues.value = []
   const body = { note: note.value, texts, confirmed: confirmed.value }
   const base = `/api/p/${props.projectId}/translations/keys`
-  try {
-    const saved = await $fetch<TextKey>(props.textKey ? `${base}/${props.textKey.key}` : base, {
+  const saved = await submit(() =>
+    $fetch<TextKey>(props.textKey ? `${base}/${props.textKey.key}` : base, {
       method: 'POST',
       body: props.textKey ? body : { ...body, key: name.value },
-    })
-    emit('saved', saved)
-  } catch (cause) {
-    const data = (cause as { data?: { data?: { issues?: typeof issues.value } } }).data?.data
-    if (data?.issues?.length) issues.value = data.issues
-    else error.value = errorMessage(cause)
-  } finally {
-    pending.value = false
-  }
+    }),
+  )
+  if (saved) emit('saved', saved)
 }
 </script>
 
@@ -83,6 +70,7 @@ async function save() {
           id="key"
           v-model="name"
           class="input font-mono text-s"
+          data-size="s"
           required
           maxlength="120"
           autocomplete="off"
@@ -102,6 +90,7 @@ async function save() {
           id="note"
           v-model="note"
           class="input"
+          data-size="s"
           maxlength="500"
           aria-describedby="note-help"
         />
@@ -122,11 +111,12 @@ async function save() {
           :aria-describedby="checks(locale).length ? `checks-${locale}` : undefined"
         ></textarea>
         <span v-if="checks(locale).length" :id="`checks-${locale}`" class="cluster gap-2">
-          <span
-            v-for="check in checks(locale)"
-            :key="check"
-            class="badge"
-            :data-tone="check === 'unchanged' ? undefined : 'warning'"
+          <span v-for="check in checks(locale)" :key="check" class="cluster gap-1 text-s">
+            <span
+              class="dot"
+              :data-tone="check === 'unchanged' ? undefined : 'warning'"
+              aria-hidden="true"
+            ></span
             >{{ CHECKS[check] }}</span
           >
           <small v-if="canConfirm(locale) && writtenFor(locale)" class="break-words"
@@ -143,22 +133,9 @@ async function save() {
       </div>
     </fieldset>
 
-    <div v-if="issues.length || error" class="alert" data-tone="danger" role="alert">
-      <div>
-        <template v-if="error"><strong>Could not save the key.</strong> {{ error }}</template>
-        <template v-else>
-          <strong>Check these fields.</strong>
-          <ul>
-            <li v-for="issue in issues" :key="issue.path">
-              <span class="font-mono">{{ issue.path }}</span
-              >: {{ issue.message }}
-            </li>
-          </ul>
-        </template>
-      </div>
-    </div>
+    <FormIssues :error="error" :issues="issues" failed="Could not save the key." />
 
-    <div class="cluster gap-3">
+    <div class="cluster gap-3 hairline-t pt-5">
       <p class="caption">An empty text removes it. Sites get changes with the next publish.</p>
       <button
         type="submit"

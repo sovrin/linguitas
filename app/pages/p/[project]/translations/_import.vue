@@ -1,39 +1,35 @@
 <script setup lang="ts">
-import { errorMessage } from '#nexitas/app/lib/format'
+import { errorMessage, plural } from '#nexitas/app/lib/format'
 import type { TranslationSpace } from '../../../../../shared/contracts'
 
 // One language file into the project: its texts by key, flat or nested.
 const project = useProject().id.value
-useHead({ title: `Import · ${useRuntimeConfig().public.nexitas.name}` })
+useHead({ title: `Import · ${project}` })
 const base = `/api/p/${project}/translations`
-const { data: space, error: loadError } = await useFetch<TranslationSpace>(base)
+const { data: space, error: loadError, refresh } = await useFetch<TranslationSpace>(base)
+useLive(refresh)
 const locale = ref(space.value?.locales[0] ?? '')
 const file = ref('')
 
-const pending = ref(false)
-const error = ref('')
+const { pending, error, issues, fieldError, submit } = useSubmit()
 const result = ref<{ added: number; changed: number; skipped: string[] } | null>(null)
 async function save() {
-  error.value = ''
   result.value = null
   let strings: unknown
   try {
     strings = JSON.parse(file.value)
   } catch {
+    issues.value = []
     error.value = 'This is not JSON.'
     return
   }
-  pending.value = true
-  try {
-    result.value = await $fetch(`${base}/import`, {
-      method: 'POST',
-      body: { locale: locale.value, strings },
-    })
-  } catch (cause) {
-    error.value = errorMessage(cause)
-  } finally {
-    pending.value = false
-  }
+  result.value =
+    (await submit(() =>
+      $fetch<{ added: number; changed: number; skipped: string[] }>(`${base}/import`, {
+        method: 'POST',
+        body: { locale: locale.value, strings },
+      }),
+    )) ?? null
 }
 </script>
 
@@ -55,11 +51,13 @@ async function save() {
       <fieldset :disabled="pending" class="stack gap-4">
         <div class="field">
           <label for="locale">Language</label>
-          <select id="locale" v-model="locale" class="select font-mono">
-            <option v-for="option in space.locales" :key="option" :value="option">
-              {{ option }}
-            </option>
-          </select>
+          <span class="select"
+            ><select id="locale" v-model="locale" class="input font-mono" data-size="s">
+              <option v-for="option in space.locales" :key="option" :value="option">
+                {{ option }}
+              </option>
+            </select></span
+          >
         </div>
         <div class="field">
           <label for="file">Texts</label>
@@ -70,21 +68,21 @@ async function save() {
             rows="14"
             required
             spellcheck="false"
+            :aria-invalid="!!fieldError('strings') || undefined"
             aria-describedby="file-help"
           ></textarea>
           <small id="file-help"
             >A JSON object of texts by key, flat or nested, as i18n libraries keep them. Keys the
             project lacks are added; a text replaces the one there.</small
           >
+          <span v-if="fieldError('strings')" data-error>{{ fieldError('strings') }}</span>
         </div>
       </fieldset>
-      <div v-if="error" class="alert" data-tone="danger" role="alert">
-        <div><strong>Could not import.</strong> {{ error }}</div>
-      </div>
+      <FormIssues :error="error" :issues="issues" failed="Could not import." />
       <div v-if="result" class="alert" data-tone="success" role="status">
         <div>
-          <strong>Imported.</strong> {{ result.added }} keys added, {{ result.changed }} texts
-          changed.
+          <strong>Imported.</strong> {{ plural(result.added, 'key') }} added,
+          {{ plural(result.changed, 'text') }} changed.
           <template v-if="result.skipped.length">
             Left out, as not a text or not a key:
             <span class="font-mono">{{ result.skipped.join(', ') }}</span
@@ -93,7 +91,7 @@ async function save() {
           <NuxtLink :to="`/p/${project}/translations`" class="link">See the keys</NuxtLink>
         </div>
       </div>
-      <div class="cluster gap-3">
+      <div class="cluster gap-3 hairline-t pt-5">
         <button
           type="submit"
           class="btn end"

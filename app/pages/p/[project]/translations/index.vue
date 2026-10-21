@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { errorMessage } from '#nexitas/app/lib/format'
+import { errorMessage, formatCount, formatTime, plural } from '#nexitas/app/lib/format'
 import {
   CHECKS,
   audit,
@@ -8,12 +8,12 @@ import {
   type TextKey,
   type TranslationSpace,
 } from '../../../../../shared/contracts'
-import { deliveryPath, longDate } from '../../../../lib/translations'
+import { deliveryPath } from '../../../../lib/translations'
 
 // A project's translations: every key in every language with what the audit finds, publishing,
 // and the token and address its sites read them with.
 const project = useProject().id.value
-useHead({ title: `${project} · Translations · ${useRuntimeConfig().public.nexitas.name}` })
+useHead({ title: `Translations · ${project}` })
 const base = `/api/p/${project}/translations`
 const { data: space, error, refresh } = await useFetch<TranslationSpace>(base)
 useLive(refresh)
@@ -78,7 +78,9 @@ async function rotate() {
   <div class="stack gap-5">
     <!-- The project exists (the core's /p/[project] saw to that), so a 404 means not started. -->
     <template v-if="error?.statusCode === 404">
-      <h1 class="text-xl weight-600">Translations</h1>
+      <div class="page-header">
+        <h1 class="text-xl weight-600">Translations</h1>
+      </div>
       <p class="text-muted">
         This project has no translations yet. Start them on
         <NuxtLink :to="`/p/${project}`" class="link">the project's page</NuxtLink>.
@@ -88,15 +90,15 @@ async function rotate() {
       <div>
         <strong>Could not load this project's translations.</strong> {{ errorMessage(error) }}
       </div>
+      <button type="button" class="btn" data-size="s" @click="refresh()">Try again</button>
     </div>
     <template v-else-if="space">
       <div class="page-header">
         <div class="stack gap-1 min-w-0">
-          <h1 class="text-xl weight-600">{{ space.name }}</h1>
+          <h1 class="text-xl weight-600">Translations</h1>
           <p class="text-s text-muted">
-            {{ space.keys.length }} {{ space.keys.length === 1 ? 'key' : 'keys' }} ·
-            {{ space.live.length }} of {{ space.locales.length }}
-            {{ space.locales.length === 1 ? 'language' : 'languages' }} live, from
+            {{ plural(space.keys.length, 'key') }} · {{ formatCount(space.live.length) }} of
+            {{ plural(space.locales.length, 'language') }} live, from
             <span class="font-mono">{{ source }}</span>
           </p>
         </div>
@@ -165,23 +167,25 @@ async function rotate() {
                       <span v-if="key.texts[locale]" class="text-s clamp-2 break-words">{{
                         key.texts[locale]!.text
                       }}</span>
-                      <span v-for="check in checksOf(key, locale)" :key="check" class="cluster">
-                        <span
-                          class="badge"
+                      <span
+                        v-for="check in checksOf(key, locale)"
+                        :key="check"
+                        class="cluster gap-1 text-s"
+                        ><span
+                          class="dot"
                           :data-tone="check === 'unchanged' ? undefined : 'warning'"
-                          >{{ CHECKS[check] }}</span
-                        >
-                      </span>
+                          aria-hidden="true"
+                        ></span
+                        >{{ CHECKS[check] }}</span
+                      >
                     </span>
                   </td>
                 </tr>
               </tbody>
             </table>
           </div>
-          <p v-else-if="space.keys.length" class="text-s text-muted">Nothing to check here.</p>
-          <p v-else class="text-s text-muted">
-            No keys yet. Add one, or import a language file you have.
-          </p>
+          <p v-else-if="space.keys.length" class="text-muted">Nothing to check here.</p>
+          <p v-else class="text-muted">No keys yet. Add one, or import a language file you have.</p>
         </section>
 
         <aside class="stack gap-5">
@@ -190,7 +194,7 @@ async function rotate() {
             <p class="text-s text-muted">
               <template v-if="space.publishedAt"
                 >Sites get version {{ space.version }}, published
-                {{ longDate(space.publishedAt) }}.</template
+                {{ formatTime(space.publishedAt) }}.</template
               >
               <template v-else>Nothing published yet: sites get a 404.</template>
               {{ space.unpublished ? 'The texts have changed since.' : '' }}
@@ -200,14 +204,15 @@ async function rotate() {
               <span class="font-mono">{{ adds.join(', ') }}</span
               >.
             </p>
-            <p v-if="drops.length" class="text-s text-warning">
-              Publishing stops delivering
-              <span class="font-mono">{{ drops.join(', ') }}</span
-              >: sites asking for {{ drops.length === 1 ? 'it' : 'them' }} get a 404.
+            <p v-if="drops.length" class="cluster gap-1 text-s">
+              <span class="dot" data-tone="warning" aria-hidden="true"></span>
+              <span
+                >Publishing stops delivering <span class="font-mono">{{ drops.join(', ') }}</span
+                >: sites asking for {{ drops.length === 1 ? 'it' : 'them' }} get a 404.</span
+              >
             </p>
             <p v-if="problems && space.unpublished" class="text-s text-muted">
-              {{ problems }} {{ problems === 1 ? 'key' : 'keys' }} still to check. Publishing
-              delivers them as they are.
+              {{ plural(problems, 'key') }} still to check. Publishing delivers them as they are.
             </p>
             <div class="cluster gap-2">
               <button
@@ -233,7 +238,7 @@ async function rotate() {
               Read-only, what was published only, from any origin. One language per request, its
               texts by key. Every request needs the token.
             </p>
-            <EmbedCode :code="snippet" caption="Shell" />
+            <EmbedCode :code="snippet" />
             <div class="cluster gap-2">
               <button
                 type="button"

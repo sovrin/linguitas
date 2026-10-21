@@ -39,10 +39,10 @@ Conventions for working on linguitas, in code and in the interface.
 
 ## UI
 
-- Built only from aequitas: semantic HTML plus its classes, `data-*` variants and ARIA state.
-- The look: nexitas' shell (navbar, one small column, statusbar); inside a page, compact density,
-  square corners, no cards, panels or sidebar. Colour only reports state, always next to a word.
-  Keys, language tags and API paths are mono. Text actions first, at most one primary button per view.
+- nexitas' UI rules and patterns apply as they stand: see `../nexitas/AGENTS.md` ("UI"). Here
+  only what is linguitas' own: keys, language tags and API paths are mono; texts are prose, not
+  mono. An audit finding is a `.dot` before its name, warning toned unless it is only "Same as
+  source".
 - Lint changed Vue files: `node ../aequitas/dist/aequitas-check.mjs --css ../nexitas/app/assets/nexitas.css <files>`.
 
 ## Checks

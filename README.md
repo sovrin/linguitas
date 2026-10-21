@@ -59,8 +59,9 @@ curl -H "Authorization: Bearer $TOKEN" https://nexitas.example.com/v1/translatio
 | `GET /v1/translations/:project/:lg` | `{ "checkout.pay": "Bezahlen", … }`, flat, keys sorted, no gaps |
 
 A language's file holds only the keys that have a text in it; fall back to the source in your i18n
-library. `locales` lists the published languages only. `401` means the token is wrong or the project has no translations. `404` means the
-language was not published. While Translations is switched off, every route answers `404`.
+library. `locales` lists the published languages only. `401` means the token is wrong or the
+project has no translations. `404` means the language was not published. While Translations is
+switched off, every route answers `404`.
 
 ## Admin API
 

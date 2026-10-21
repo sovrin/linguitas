@@ -3,7 +3,8 @@ import { errorMessage } from '#nexitas/app/lib/format'
 import type { TextKey, TranslationSpace } from '../../../../../shared/contracts'
 
 const project = useProject().id.value
-useHead({ title: `New key · ${useRuntimeConfig().public.nexitas.name}` })
+useHead({ title: `New key · ${project}` })
+// Not live: the page is a form, and its fields should not shift while it is typed in.
 const { data: space, error } = await useFetch<TranslationSpace>(`/api/p/${project}/translations`)
 const saved = (key: TextKey) => navigateTo(`/p/${project}/translations/${key.key}`)
 </script>

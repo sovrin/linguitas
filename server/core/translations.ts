@@ -1,13 +1,10 @@
 // A project's translations: its delivery token, its languages, its keys with their texts, and what
 // was last published. A project's translations own its keys, a key its texts; deleting one deletes
 // what it owns (foreign keys cascade, see module.ts).
-import { randomBytes } from 'node:crypto'
 import type { DatabaseSync } from 'node:sqlite'
+import { newToken } from '#nexitas/server/core/auth'
 import { transaction } from '#nexitas/server/core/database'
 import type { KeyInput, Snapshot, Text, TextKey } from '../../shared/contracts'
-
-/** A read token for the delivery API. Shown to the owner, so it is kept as it is. */
-export const newToken = () => `lt_${randomBytes(24).toString('base64url')}`
 
 // ── A project's translations
 
@@ -66,7 +63,7 @@ export function createSpace(db: DatabaseSync, projectId: string, now = Date.now(
           `INSERT OR IGNORE INTO translation_projects (project_id, token, source, created_at)
           VALUES (?, ?, 'en', ?)`,
         )
-        .run(projectId, newToken(), now).changes === 1
+        .run(projectId, newToken('lt_'), now).changes === 1
     if (created)
       db.prepare(
         `INSERT INTO translation_locales (project_id, locale, live, created_at)
@@ -79,7 +76,7 @@ export function createSpace(db: DatabaseSync, projectId: string, now = Date.now(
 /** A new token; the old one stops working at once. */
 export function rotateToken(db: DatabaseSync, projectId: string) {
   db.prepare('UPDATE translation_projects SET token = ? WHERE project_id = ?').run(
-    newToken(),
+    newToken('lt_'),
     projectId,
   )
 }

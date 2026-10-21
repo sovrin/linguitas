@@ -1,8 +1,9 @@
 // linguitas as a nexitas module: its schema, the read-only delivery API sites and build steps call,
 // and what it says about a project. The owner's sign-in, the /api guard and the projects are the
 // core's.
-import type { H3Event } from 'h3'
 import type { NexitasModule } from '#nexitas/shared/modules'
+import { formatCount, plural } from '#nexitas/app/lib/format'
+import { readOnlyCors } from '#nexitas/server/utils/cors'
 import { countProblems } from '../../shared/contracts'
 import { deleteSpace, getSpace, isUnpublished, listKeys } from './translations'
 
@@ -37,10 +38,14 @@ export const linguitas: NexitasModule = {
   ],
   // Read by sites, apps and build steps anywhere, with the project's token instead of a cookie.
   publicRoutes: [
-    { path: /^\/v1\/translations\/([a-z0-9-]+)(?:\/[A-Za-z0-9-]+)?$/, json: true, guard: cors },
+    {
+      path: /^\/v1\/translations\/([a-z0-9-]+)(?:\/[A-Za-z0-9-]+)?$/,
+      json: true,
+      guard: (event) => readOnlyCors(event, 'The translations API only reads.'),
+    },
   ],
   // Everything linguitas serves; switched off, all of it answers 404.
-  paths: ['/translations', '/api/translations'],
+  paths: ['/translations', '/api/translations', '/v1/translations'],
   // An imported language file can pass 64 kB.
   maxBody: 1024 * 1024,
   projectStatus: (db, projectId) => {
@@ -49,31 +54,14 @@ export const linguitas: NexitasModule = {
     const keys = listKeys(db, projectId)
     const problems = countProblems(keys, space.live)
     return [
-      {
-        text: `${keys.length} ${keys.length === 1 ? 'key' : 'keys'}`,
-        to: `/p/${projectId}/translations`,
-      },
-      ...(problems ? [{ text: `${problems} to check`, tone: 'warning' as const }] : []),
+      { text: plural(keys.length, 'key'), to: `/p/${projectId}/translations` },
+      ...(problems
+        ? [{ text: `${formatCount(problems)} to check`, tone: 'warning' as const }]
+        : []),
       ...(isUnpublished(db, projectId, space)
-        ? [{ text: 'changes not published', tone: 'warning' as const }]
+        ? [{ text: 'Changes not published', tone: 'warning' as const }]
         : []),
     ]
   },
   deleteProject: (db, projectId) => deleteSpace(db, projectId),
-}
-
-/** Any origin may read: the token, not a cookie, decides. Preflights are answered here. */
-function cors(event: H3Event) {
-  setHeaders(event, { 'Access-Control-Allow-Origin': '*', Vary: 'Origin' })
-  if (event.method === 'OPTIONS') {
-    setHeaders(event, {
-      'Access-Control-Allow-Methods': 'GET',
-      'Access-Control-Allow-Headers': 'authorization',
-      'Access-Control-Max-Age': '600',
-    })
-    setResponseStatus(event, 204)
-    return ''
-  }
-  if (event.method !== 'GET' && event.method !== 'HEAD')
-    throw createError({ statusCode: 405, statusMessage: 'The translations API only reads.' })
 }

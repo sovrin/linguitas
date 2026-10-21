@@ -8,8 +8,6 @@ export default defineEventHandler((event): TranslationSpace => {
   const { project, space } = translationSpace(event)
   const db = nexitasDatabase()
   return {
-    projectId: project.id,
-    name: project.name,
     token: space.token,
     source: space.source,
     locales: space.locales,

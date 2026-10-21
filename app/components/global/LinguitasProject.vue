@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { errorMessage } from '#nexitas/app/lib/format'
+import { errorMessage, formatCount, plural } from '#nexitas/app/lib/format'
 import type { ProjectSummary } from '#nexitas/shared/contracts'
 import { countProblems, type TranslationSpace } from '../../../shared/contracts'
 
@@ -39,11 +39,16 @@ async function start() {
     <template v-else-if="space">
       <p class="cluster gap-3 text-s">
         <span class="text-muted"
-          >{{ space.keys.length }} {{ space.keys.length === 1 ? 'key' : 'keys' }} in
-          {{ space.live.join(', ') }}</span
+          >{{ plural(space.keys.length, 'key') }} in {{ space.live.join(', ') }}</span
         >
-        <span v-if="problems" class="badge" data-tone="warning">{{ problems }} to check</span>
-        <span v-if="space.unpublished" class="badge" data-tone="warning">Not published</span>
+        <span v-if="problems" class="cluster gap-1"
+          ><span class="dot" data-tone="warning" aria-hidden="true"></span
+          >{{ formatCount(problems) }} to check</span
+        >
+        <span v-if="space.unpublished" class="cluster gap-1"
+          ><span class="dot" data-tone="warning" aria-hidden="true"></span>Changes not
+          published</span
+        >
         <NuxtLink :to="`/p/${project.id}/translations`" class="link">Keys and API</NuxtLink>
       </p>
     </template>

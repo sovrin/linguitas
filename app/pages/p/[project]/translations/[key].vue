@@ -1,15 +1,16 @@
 <script setup lang="ts">
-import { errorMessage } from '#nexitas/app/lib/format'
+import { errorMessage, formatTime } from '#nexitas/app/lib/format'
 import type { TextKey } from '../../../../../shared/contracts'
-import { longDate } from '../../../../lib/translations'
 
 // One key: its texts in every language, and deleting it.
 const route = useRoute()
 const project = useProject().id.value
 const name = route.params.key as string
-useHead({ title: `${name} · ${useRuntimeConfig().public.nexitas.name}` })
+useHead({ title: `${name} · ${project}` })
 const base = `/api/p/${project}/translations/keys/${name}`
 const { data, error, refresh } = await useFetch<{ locales: string[]; key: TextKey }>(base)
+// Not live: a refresh after a change elsewhere would rebuild the form (keyed by updatedAt) and lose
+// what is typed.
 
 const savedNotice = ref(false)
 async function saved() {
@@ -46,7 +47,7 @@ async function remove() {
       <div class="page-header">
         <div class="stack gap-1 min-w-0">
           <h1 class="text-xl weight-600 font-mono break-words">{{ data.key.key }}</h1>
-          <p class="text-s text-muted">Saved {{ longDate(data.key.updatedAt) }}</p>
+          <p class="text-s text-muted">Saved {{ formatTime(data.key.updatedAt) }}</p>
         </div>
         <button
           type="button"

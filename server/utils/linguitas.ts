@@ -1,6 +1,6 @@
 import type { H3Event } from 'h3'
-import { tokensMatch } from '#nexitas/server/core/auth'
 import { getProject } from '#nexitas/server/core/projects'
+import { requireBearer } from '#nexitas/server/utils/auth'
 import { nexitasDatabase } from '#nexitas/server/utils/nexitas'
 import { requestProject } from '#nexitas/server/utils/projects'
 import { isKey } from '../../shared/contracts'
@@ -38,10 +38,6 @@ export function requireTranslationToken(event: H3Event) {
   const db = nexitasDatabase()
   const id = getRouterParam(event, 'project') ?? ''
   const space = getSpace(db, id)
-  const token = getHeader(event, 'authorization')?.replace(/^Bearer\s+/i, '') ?? ''
-  if (!space || !tokensMatch(token, space.token)) {
-    setHeader(event, 'WWW-Authenticate', 'Bearer')
-    throw createError({ statusCode: 401, statusMessage: 'Invalid token.' })
-  }
-  return { project: getProject(db, id)!, space }
+  requireBearer(event, space?.token)
+  return { project: getProject(db, id)!, space: space! }
 }
