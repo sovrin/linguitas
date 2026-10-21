@@ -1,15 +1,16 @@
 <script setup lang="ts">
-import { errorMessage } from '#nexitas/app/lib/format'
 import type { TranslationSpace } from '../../../../../shared/contracts'
 
 // The project's languages, one step at a time: a new one starts as a draft, a live one has to go
 // offline before it can be removed, and the source changes on its own. Sites see none of it until
 // the next publish.
 const project = useProject().id.value
-useHead({ title: `Languages · ${project}` })
 const base = `/api/p/${project}/translations`
-const { data: space, error: loadError, refresh } = await useFetch<TranslationSpace>(base)
-useLive(refresh)
+const {
+  data: space,
+  error: loadError,
+  refresh,
+} = await useProjectFetch<TranslationSpace>('/translations')
 
 const filled = (locale: string) => space.value?.keys.filter((key) => key.texts[locale]).length ?? 0
 const delivered = (locale: string) => space.value?.delivered.includes(locale) ?? false
@@ -51,105 +52,86 @@ function confirm() {
 </script>
 
 <template>
-  <div class="stack gap-5">
-    <nav aria-label="Breadcrumb">
-      <ol class="breadcrumb">
-        <li><NuxtLink :to="`/p/${project}/translations`">Translations</NuxtLink></li>
-        <li aria-current="page">Languages</li>
-      </ol>
-    </nav>
-    <div class="page-header">
-      <h1 class="text-xl weight-600">Languages</h1>
-    </div>
-    <div v-if="loadError" class="alert" data-tone="danger" role="alert">
-      <div><strong>Could not load the languages.</strong> {{ errorMessage(loadError) }}</div>
-    </div>
-    <template v-else-if="space">
+  <AppPage title="Languages" failed="Could not load the languages." :error="loadError">
+    <template v-if="space">
       <p class="text-s text-muted measure">
         A new language is a draft: you write and check it here, and sites get it once it is live and
         published. Every change on this page reaches sites with the next publish.
       </p>
-      <div class="table-scroll">
-        <table class="table" data-size="s">
-          <thead>
-            <tr>
-              <th scope="col">Language</th>
-              <th scope="col">State</th>
-              <th scope="col" data-num>Texts</th>
-              <th scope="col"><span class="sr-only">Actions</span></th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="l in space.locales" :key="l">
-              <td class="font-mono weight-600">{{ l }}</td>
-              <td class="text-s">
-                <span class="cluster gap-1 flex-nowrap">
-                  <span
-                    class="dot"
-                    :data-tone="
-                      space.live.includes(l) ? 'success' : delivered(l) ? 'warning' : undefined
-                    "
-                    aria-hidden="true"
-                  ></span>
-                  <span
-                    >{{ l === space.source ? 'Source' : space.live.includes(l) ? 'Live' : 'Draft'
-                    }}<span v-if="space.live.includes(l) && !delivered(l)" class="text-muted">
-                      · delivered from the next publish</span
-                    ><span v-if="!space.live.includes(l) && delivered(l)">
-                      · sites get it until the next publish</span
-                    ></span
+      <DataTable>
+        <thead>
+          <tr>
+            <th scope="col">Language</th>
+            <th scope="col">State</th>
+            <th scope="col" data-num>Texts</th>
+            <th scope="col"><span class="sr-only">Actions</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="l in space.locales" :key="l">
+            <td class="font-mono weight-600">{{ l }}</td>
+            <td class="text-s">
+              <StateDot
+                :tone="space.live.includes(l) ? 'success' : delivered(l) ? 'warning' : undefined"
+              >
+                <span
+                  >{{ l === space.source ? 'Source' : space.live.includes(l) ? 'Live' : 'Draft'
+                  }}<span v-if="space.live.includes(l) && !delivered(l)" class="text-muted">
+                    · delivered from the next publish</span
+                  ><span v-if="!space.live.includes(l) && delivered(l)">
+                    · sites get it until the next publish</span
+                  ></span
+                >
+              </StateDot>
+            </td>
+            <td data-num>{{ filled(l) }} of {{ space.keys.length }}</td>
+            <td>
+              <span v-if="l !== space.source" class="cluster gap-2 justify-end">
+                <template v-if="space.live.includes(l)">
+                  <button
+                    type="button"
+                    class="btn"
+                    data-size="s"
+                    data-variant="ghost"
+                    @click="ask('source', l)"
                   >
-                </span>
-              </td>
-              <td data-num>{{ filled(l) }} of {{ space.keys.length }}</td>
-              <td>
-                <span v-if="l !== space.source" class="cluster gap-2 justify-end">
-                  <template v-if="space.live.includes(l)">
-                    <button
-                      type="button"
-                      class="btn"
-                      data-size="s"
-                      data-variant="ghost"
-                      @click="ask('source', l)"
-                    >
-                      Make source
-                    </button>
-                    <button
-                      type="button"
-                      class="btn"
-                      data-size="s"
-                      data-variant="ghost"
-                      data-tone="danger"
-                      @click="ask('offline', l)"
-                    >
-                      Take offline
-                    </button>
-                  </template>
-                  <template v-else>
-                    <button
-                      type="button"
-                      class="btn"
-                      data-size="s"
-                      @click="send(`/${l}`, { live: true })"
-                    >
-                      Put live
-                    </button>
-                    <button
-                      type="button"
-                      class="btn"
-                      data-size="s"
-                      data-variant="ghost"
-                      @click="ask('remove', l)"
-                    >
-                      Remove
-                    </button>
-                  </template>
-                </span>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+                    Make source
+                  </button>
+                  <button
+                    type="button"
+                    class="btn"
+                    data-size="s"
+                    data-variant="ghost"
+                    data-tone="danger"
+                    @click="ask('offline', l)"
+                  >
+                    Take offline
+                  </button>
+                </template>
+                <template v-else>
+                  <button
+                    type="button"
+                    class="btn"
+                    data-size="s"
+                    @click="send(`/${l}`, { live: true })"
+                  >
+                    Put live
+                  </button>
+                  <button
+                    type="button"
+                    class="btn"
+                    data-size="s"
+                    data-variant="ghost"
+                    @click="ask('remove', l)"
+                  >
+                    Remove
+                  </button>
+                </template>
+              </span>
+            </td>
+          </tr>
+        </tbody>
+      </DataTable>
       <FormIssues :error="error" :issues="issues" failed="Could not change the languages." />
 
       <form class="stack gap-3 measure" @submit.prevent="add">
@@ -209,5 +191,5 @@ function confirm() {
         >
       </template>
     </ConfirmDialog>
-  </div>
+  </AppPage>
 </template>

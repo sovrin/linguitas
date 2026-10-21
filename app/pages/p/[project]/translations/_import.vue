@@ -1,13 +1,11 @@
 <script setup lang="ts">
-import { errorMessage, plural } from '#nexitas/app/lib/format'
+import { plural } from '#nexitas/app/lib/format'
 import type { TranslationSpace } from '../../../../../shared/contracts'
 
 // One language file into the project: its texts by key, flat or nested.
 const project = useProject().id.value
-useHead({ title: `Import · ${project}` })
 const base = `/api/p/${project}/translations`
-const { data: space, error: loadError, refresh } = await useFetch<TranslationSpace>(base)
-useLive(refresh)
+const { data: space, error: loadError } = await useProjectFetch<TranslationSpace>('/translations')
 const locale = ref(space.value?.locales[0] ?? '')
 const file = ref('')
 
@@ -34,20 +32,8 @@ async function save() {
 </script>
 
 <template>
-  <div class="stack gap-5">
-    <nav aria-label="Breadcrumb">
-      <ol class="breadcrumb">
-        <li><NuxtLink :to="`/p/${project}/translations`">Translations</NuxtLink></li>
-        <li aria-current="page">Import</li>
-      </ol>
-    </nav>
-    <div class="page-header">
-      <h1 class="text-xl weight-600">Import</h1>
-    </div>
-    <div v-if="loadError" class="alert" data-tone="danger" role="alert">
-      <div><strong>Could not load the languages.</strong> {{ errorMessage(loadError) }}</div>
-    </div>
-    <form v-else-if="space" class="stack gap-5 measure" @submit.prevent="save">
+  <AppPage title="Import" failed="Could not load the languages." :error="loadError">
+    <form v-if="space" class="stack gap-5 measure" @submit.prevent="save">
       <fieldset :disabled="pending" class="stack gap-4">
         <div class="field">
           <label for="locale">Language</label>
@@ -79,18 +65,15 @@ async function save() {
         </div>
       </fieldset>
       <FormIssues :error="error" :issues="issues" failed="Could not import." />
-      <div v-if="result" class="alert" data-tone="success" role="status">
-        <div>
-          <strong>Imported.</strong> {{ plural(result.added, 'key') }} added,
-          {{ plural(result.changed, 'text') }} changed.
-          <template v-if="result.skipped.length">
-            Left out, as not a text or not a key:
-            <span class="font-mono">{{ result.skipped.join(', ') }}</span
-            >.
-          </template>
-          <NuxtLink :to="`/p/${project}/translations`" class="link">See the keys</NuxtLink>
-        </div>
-      </div>
+      <AppAlert v-if="result" tone="success" title="Imported.">
+        {{ plural(result.added, 'key') }} added, {{ plural(result.changed, 'text') }} changed.
+        <template v-if="result.skipped.length">
+          Left out, as not a text or not a key:
+          <span class="font-mono">{{ result.skipped.join(', ') }}</span
+          >.
+        </template>
+        <NuxtLink :to="`/p/${project}/translations`" class="link">See the keys</NuxtLink>
+      </AppAlert>
       <div class="cluster gap-3 hairline-t pt-5">
         <button
           type="submit"
@@ -104,5 +87,5 @@ async function save() {
         </button>
       </div>
     </form>
-  </div>
+  </AppPage>
 </template>

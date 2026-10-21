@@ -111,13 +111,12 @@ async function save() {
           :aria-describedby="checks(locale).length ? `checks-${locale}` : undefined"
         ></textarea>
         <span v-if="checks(locale).length" :id="`checks-${locale}`" class="cluster gap-2">
-          <span v-for="check in checks(locale)" :key="check" class="cluster gap-1 text-s">
-            <span
-              class="dot"
-              :data-tone="check === 'unchanged' ? undefined : 'warning'"
-              aria-hidden="true"
-            ></span
-            >{{ CHECKS[check] }}</span
+          <StateDot
+            v-for="check in checks(locale)"
+            :key="check"
+            class="text-s"
+            :tone="check === 'unchanged' ? undefined : 'warning'"
+            >{{ CHECKS[check] }}</StateDot
           >
           <small v-if="canConfirm(locale) && writtenFor(locale)" class="break-words"
             >Written for “{{ writtenFor(locale) }}”</small

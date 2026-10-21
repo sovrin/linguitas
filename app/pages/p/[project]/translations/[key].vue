@@ -6,11 +6,13 @@ import type { TextKey } from '../../../../../shared/contracts'
 const route = useRoute()
 const project = useProject().id.value
 const name = route.params.key as string
-useHead({ title: `${name} · ${project}` })
 const base = `/api/p/${project}/translations/keys/${name}`
-const { data, error, refresh } = await useFetch<{ locales: string[]; key: TextKey }>(base)
 // Not live: a refresh after a change elsewhere would rebuild the form (keyed by updatedAt) and lose
 // what is typed.
+const { data, error, refresh } = await useProjectFetch<{ locales: string[]; key: TextKey }>(
+  `/translations/keys/${name}`,
+  { live: false },
+)
 
 const savedNotice = ref(false)
 async function saved() {
@@ -18,7 +20,6 @@ async function saved() {
   savedNotice.value = true
 }
 
-const deleteOpen = ref(false)
 const deleteError = ref('')
 async function remove() {
   deleteError.value = ''
@@ -32,40 +33,18 @@ async function remove() {
 </script>
 
 <template>
-  <div class="stack gap-5">
-    <nav aria-label="Breadcrumb">
-      <ol class="breadcrumb">
-        <li><NuxtLink :to="`/p/${project}/translations`">Translations</NuxtLink></li>
-        <li aria-current="page" class="font-mono">{{ name }}</li>
-      </ol>
-    </nav>
-
-    <div v-if="error" class="alert" data-tone="danger" role="alert">
-      <div><strong>Could not load this key.</strong> {{ errorMessage(error) }}</div>
-    </div>
-    <template v-else-if="data">
-      <div class="page-header">
-        <div class="stack gap-1 min-w-0">
-          <h1 class="text-xl weight-600 font-mono break-words">{{ data.key.key }}</h1>
-          <p class="text-s text-muted">Saved {{ formatTime(data.key.updatedAt) }}</p>
-        </div>
-        <button
-          type="button"
-          class="btn"
-          data-size="s"
-          data-variant="ghost"
-          data-tone="danger"
-          @click="deleteOpen = true"
-        >
-          Delete key
-        </button>
-      </div>
-      <div v-if="deleteError" class="alert" data-tone="danger" role="alert">
-        <div><strong>Could not delete the key.</strong> {{ deleteError }}</div>
-      </div>
-      <div v-if="savedNotice" class="alert" data-tone="success" role="status">
-        <div><strong>Saved.</strong> Sites get it with the next publish.</div>
-      </div>
+  <AppPage :title="name" mono failed="Could not load this key." :error="error">
+    <template v-if="data" #subtitle>Saved {{ formatTime(data.key.updatedAt) }}</template>
+    <template v-if="data" #actions>
+      <DangerAction label="Delete key" :title="`Delete ${name}?`" @confirm="remove">
+        Its texts in every language go with it. Sites keep it until the next publish.
+      </DangerAction>
+    </template>
+    <template v-if="data">
+      <AppAlert v-if="deleteError" title="Could not delete the key.">{{ deleteError }}</AppAlert>
+      <AppAlert v-if="savedNotice" tone="success" title="Saved."
+        >Sites get it with the next publish.</AppAlert
+      >
       <div class="measure">
         <KeyForm
           :key="data.key.updatedAt"
@@ -76,17 +55,5 @@ async function remove() {
         />
       </div>
     </template>
-
-    <ConfirmDialog
-      v-model:open="deleteOpen"
-      :title="`Delete ${name}?`"
-      confirm-label="Delete key"
-      tone="danger"
-      @confirm="remove"
-    >
-      <template #description
-        >Its texts in every language go with it. Sites keep it until the next publish.</template
-      >
-    </ConfirmDialog>
-  </div>
+  </AppPage>
 </template>
