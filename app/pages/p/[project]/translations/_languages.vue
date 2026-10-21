@@ -1,0 +1,209 @@
+<script setup lang="ts">
+import { errorMessage } from '#nexitas/app/lib/format'
+import type { TranslationSpace } from '../../../../../shared/contracts'
+
+// The project's languages, one step at a time: a new one starts as a draft, a live one has to go
+// offline before it can be removed, and the source changes on its own. Sites see none of it until
+// the next publish.
+const project = useProject().id.value
+useHead({ title: `Languages · ${useRuntimeConfig().public.nexitas.name}` })
+const base = `/api/p/${project}/translations`
+const { data: space, error: loadError, refresh } = await useFetch<TranslationSpace>(base)
+useLive(refresh)
+
+const filled = (locale: string) => space.value?.keys.filter((key) => key.texts[locale]).length ?? 0
+const delivered = (locale: string) => space.value?.delivered.includes(locale) ?? false
+
+const error = ref('')
+async function send(path: string, body: object) {
+  error.value = ''
+  try {
+    await $fetch(`${base}/languages${path}`, { method: 'POST', body })
+    await refresh()
+    return true
+  } catch (cause) {
+    error.value = errorMessage(cause)
+    return false
+  }
+}
+
+const locale = ref('')
+const adding = ref(false)
+async function add() {
+  adding.value = true
+  if (await send('', { locale: locale.value.trim() })) locale.value = ''
+  adding.value = false
+}
+
+// The steps a site would notice, or that change every translation, are confirmed first.
+type Step = 'offline' | 'remove' | 'source'
+const step = ref<{ kind: Step; locale: string }>({ kind: 'remove', locale: '' })
+const confirmOpen = ref(false)
+function ask(kind: Step, locale: string) {
+  step.value = { kind, locale }
+  confirmOpen.value = true
+}
+const STEPS: Record<Step, { title: (l: string) => string; label: string; danger?: boolean }> = {
+  offline: { title: (l) => `Take ${l} offline?`, label: 'Take offline', danger: true },
+  remove: { title: (l) => `Remove ${l}?`, label: 'Remove' },
+  source: { title: (l) => `Translate from ${l}?`, label: 'Make it the source' },
+}
+function confirm() {
+  const { kind, locale } = step.value
+  if (kind === 'offline') send(`/${locale}`, { live: false })
+  else if (kind === 'remove') send(`/${locale}/delete`, {})
+  else send(`/${locale}/source`, {})
+}
+</script>
+
+<template>
+  <div class="stack gap-5">
+    <nav aria-label="Breadcrumb">
+      <ol class="breadcrumb">
+        <li><NuxtLink :to="`/p/${project}/translations`">Translations</NuxtLink></li>
+        <li aria-current="page">Languages</li>
+      </ol>
+    </nav>
+    <div class="page-header">
+      <h1 class="text-xl weight-600">Languages</h1>
+    </div>
+    <div v-if="loadError" class="alert" data-tone="danger" role="alert">
+      <div><strong>Could not load the languages.</strong> {{ errorMessage(loadError) }}</div>
+    </div>
+    <template v-else-if="space">
+      <p class="text-s text-muted measure">
+        A new language is a draft: you write and check it here, and sites get it once it is live and
+        published. Every change on this page reaches sites with the next publish.
+      </p>
+      <div class="table-scroll">
+        <table class="table" data-size="s">
+          <thead>
+            <tr>
+              <th scope="col">Language</th>
+              <th scope="col">State</th>
+              <th scope="col" data-num>Texts</th>
+              <th scope="col"><span class="sr-only">Actions</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="l in space.locales" :key="l">
+              <td class="font-mono weight-600">{{ l }}</td>
+              <td class="text-s">
+                <span v-if="l === space.source">Source</span>
+                <span v-else-if="space.live.includes(l)" class="text-success">Live</span>
+                <span v-else class="text-muted">Draft</span>
+                <span v-if="space.live.includes(l) && !delivered(l)" class="text-muted">
+                  · delivered from the next publish</span
+                >
+                <span v-if="!space.live.includes(l) && delivered(l)" class="text-warning">
+                  · sites get it until the next publish</span
+                >
+              </td>
+              <td data-num>{{ filled(l) }} of {{ space.keys.length }}</td>
+              <td>
+                <span v-if="l !== space.source" class="cluster gap-2 justify-end">
+                  <template v-if="space.live.includes(l)">
+                    <button
+                      type="button"
+                      class="btn"
+                      data-size="s"
+                      data-variant="ghost"
+                      @click="ask('source', l)"
+                    >
+                      Make source
+                    </button>
+                    <button
+                      type="button"
+                      class="btn"
+                      data-size="s"
+                      data-variant="ghost"
+                      data-tone="danger"
+                      @click="ask('offline', l)"
+                    >
+                      Take offline
+                    </button>
+                  </template>
+                  <template v-else>
+                    <button
+                      type="button"
+                      class="btn"
+                      data-size="s"
+                      @click="send(`/${l}`, { live: true })"
+                    >
+                      Put live
+                    </button>
+                    <button
+                      type="button"
+                      class="btn"
+                      data-size="s"
+                      data-variant="ghost"
+                      @click="ask('remove', l)"
+                    >
+                      Remove
+                    </button>
+                  </template>
+                </span>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div v-if="error" class="alert" data-tone="danger" role="alert">
+        <div><strong>Could not change the languages.</strong> {{ error }}</div>
+      </div>
+
+      <form class="stack gap-3 measure" @submit.prevent="add">
+        <div class="field">
+          <label for="locale">Add a language</label>
+          <input
+            id="locale"
+            v-model="locale"
+            class="input font-mono text-s"
+            required
+            maxlength="35"
+            autocomplete="off"
+            spellcheck="false"
+            aria-describedby="locale-help"
+          />
+          <small id="locale-help"
+            >A language tag, such as de, fr or pt-BR. It starts as a draft.</small
+          >
+        </div>
+        <div class="cluster gap-3">
+          <button
+            type="submit"
+            class="btn end"
+            data-size="s"
+            :disabled="adding"
+            :aria-busy="adding || undefined"
+          >
+            Add language
+          </button>
+        </div>
+      </form>
+    </template>
+
+    <ConfirmDialog
+      v-model:open="confirmOpen"
+      :title="STEPS[step.kind].title(step.locale)"
+      :confirm-label="STEPS[step.kind].label"
+      :tone="STEPS[step.kind].danger ? 'danger' : undefined"
+      @confirm="confirm"
+    >
+      <template #description>
+        <template v-if="step.kind === 'offline'"
+          >Sites keep getting it until the next publish; after that, asking for it is a 404. Its
+          texts stay, and you can put it live again.</template
+        >
+        <template v-else-if="step.kind === 'remove'"
+          >It leaves this list and the keys' pages. Its texts are kept: add it again and they are
+          back.</template
+        >
+        <template v-else-if="step.kind === 'source'"
+          >Every other language is then translated from it. Translations that were up to date stay
+          up to date; the rest, the current source included, show as changed.</template
+        >
+      </template>
+    </ConfirmDialog>
+  </div>
+</template>
