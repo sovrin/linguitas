@@ -28,42 +28,46 @@ async function saved(saved: TextKey) {
   savedNotice.value = true
 }
 
+const deleting = ref(false)
 const deleteError = ref('')
 async function remove() {
+  deleting.value = true
   deleteError.value = ''
   try {
     await $fetch(`${base}/delete`, { method: 'POST', body: {} })
     await navigateTo(`/p/${project}/translations`)
   } catch (cause) {
     deleteError.value = errorMessage(cause)
+  } finally {
+    deleting.value = false
   }
 }
 </script>
 
 <template>
-  <KeyTree :selected="name">
+  <KeyTree :selected="name" :aside-name="name">
     <template #aside>
-      <AppAlert v-if="error" title="Could not load this key.">{{ errorMessage(error) }}</AppAlert>
+      <AppAlert v-if="error" title="Could not load this key."
+        >{{ errorMessage(error) }}
+        <template #actions>
+          <button type="button" class="btn" data-size="s" @click="refresh()">Try again</button>
+        </template>
+      </AppAlert>
       <template v-else-if="data && !data.key">
-        <div class="stack gap-1">
-          <p class="font-mono weight-600 break-words">{{ name }}</p>
-          <p class="text-s text-muted">
-            No texts yet. Write one, and the keys below get it as their parent.
-          </p>
-        </div>
+        <p class="text-s text-muted">
+          No texts yet. Write one, and the keys below get it as their parent.
+        </p>
         <KeyForm :project-id="project" :locales="data.locales" :name="name" @saved="saved" />
       </template>
       <template v-else-if="data?.key">
         <div class="stack gap-1">
-          <p class="font-mono weight-600 break-words">{{ name }}</p>
           <p class="text-s text-muted">Saved {{ formatTime(data.key.updatedAt) }}</p>
           <!-- What the sites' builds reported; nothing until one has. -->
           <p v-if="data.usedBy?.length" class="text-s text-muted">
             Used by <span class="font-mono">{{ data.usedBy.join(', ') }}</span>
           </p>
-          <StateDot v-else-if="data.usedBy" class="text-s">Not in any site's code</StateDot>
+          <StateDot v-else-if="data.usedBy" class="text-s">Not in code</StateDot>
         </div>
-        <AppAlert v-if="deleteError" title="Could not delete the key.">{{ deleteError }}</AppAlert>
         <AppAlert v-if="savedNotice" tone="success" title="Saved."
           >Sites get it with the next publish.</AppAlert
         >
@@ -78,9 +82,15 @@ async function remove() {
     </template>
     <template v-if="data?.key" #danger>
       <span>Removes the key and its texts in every language.</span>
-      <DangerAction label="Delete key" :title="`Delete ${name}?`" @confirm="remove">
-        Its texts in every language go with it. Sites keep it until the next publish.
+      <DangerAction
+        label="Delete key"
+        :title="`Delete ${name}?`"
+        :pending="deleting"
+        @confirm="remove"
+      >
+        Sites keep it until the next publish.
       </DangerAction>
+      <AppAlert v-if="deleteError" title="Could not delete the key.">{{ deleteError }}</AppAlert>
     </template>
   </KeyTree>
 </template>

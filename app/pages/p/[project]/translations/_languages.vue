@@ -54,10 +54,6 @@ function confirm() {
 <template>
   <AppPage title="Languages" failed="Could not load the languages." :error="loadError">
     <template v-if="space">
-      <p class="text-s text-muted measure">
-        A new language is a draft: you write and check it here, and sites get it once it is live and
-        published. Every change on this page reaches sites with the next publish.
-      </p>
       <DataTable>
         <thead>
           <tr>

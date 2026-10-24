@@ -17,33 +17,15 @@ import { keyTree, keysUnder, type KeyNode } from '../lib/translations'
  *  text and a strip of squares, one per language, for what is translated, what to check and what
  *  is missing, so any number of languages fits one column. The key in hand (`selected`) opens in
  *  the inspector the page puts in `aside` (and `danger`); without one, the inspector shows how
- *  sites get the texts and which keys their code uses. */
-const props = defineProps<{ selected?: string }>()
+ *  sites get the texts and which keys their code uses. `aside-name` names the key in hand in the
+ *  inspector's header. */
+const props = defineProps<{ selected?: string; asideName?: string }>()
 const slots = useSlots()
 const project = useProject().id.value
 const base = `/api/p/${project}/translations`
 const { data: space, error, refresh } = await useProjectFetch<TranslationSpace>('/translations')
 // The project exists (the core's /p/[project] saw to that), so a 404 means not started.
 const notStarted = computed(() => error.value?.statusCode === 404)
-const origin = useRequestURL().origin
-const api = `${origin}/v1/translations/${project}`
-// How a site's build syncs, and how its code reads the texts it synced.
-const buildSnippet = computed(() =>
-  [
-    `curl -o scripts/linguitas.mjs ${origin}/v1/translations/sync.mjs`,
-    `LINGUITAS_URL=${origin} LINGUITAS_PROJECT=${project} \\`,
-    `LINGUITAS_TOKEN=${space.value?.token ?? ''} node scripts/linguitas.mjs --consumer web`,
-  ].join('\n'),
-)
-const siteSnippet = [
-  `import texts from './linguitas/texts.json'`,
-  `import { start, t, watch } from './linguitas/client'`,
-  ``,
-  `start(texts, { locale: 'de' })`,
-  `watch({ url: '${api}' })`,
-  `t('checkout.pay')`,
-].join('\n')
-
 const source = computed(() => space.value?.source ?? '')
 const checksOf = (key: TextKey, locale: string) => audit(key, locale, source.value)
 // Which keys show: an audit finding and a search, both in the address like the inbox's filters,
@@ -193,36 +175,60 @@ async function publish() {
   }
 }
 
-// The publish history, newest first: an older version can go out again as the next one.
+// The publish history, newest first: an older version can go out again as the next one. That
+// changes what sites get, so it asks first.
+const again = ref<number>()
+const confirmingAgain = ref(false)
+const republishing = ref(false)
 const republishError = ref('')
-async function republish(version: number) {
+function askAgain(version: number) {
+  again.value = version
+  confirmingAgain.value = true
+}
+async function republish() {
+  republishing.value = true
   republishError.value = ''
   try {
-    await $fetch(`${base}/versions/${version}/publish`, { method: 'POST', body: {} })
+    await $fetch(`${base}/versions/${again.value}/publish`, { method: 'POST', body: {} })
     await refresh()
   } catch (cause) {
     republishError.value = errorMessage(cause)
+  } finally {
+    republishing.value = false
   }
 }
+// Forgetting a site removes its button, so focus moves on to the next site's.
+const sitesList = ref<HTMLElement>()
+const forgetting = ref('')
 const forgetError = ref('')
-async function forget(consumer: string) {
+async function forget(consumer: string, index: number) {
+  forgetting.value = consumer
   forgetError.value = ''
   try {
     await $fetch(`${base}/consumers/${consumer}/delete`, { method: 'POST', body: {} })
     await refresh()
+    await nextTick()
+    const buttons = sitesList.value?.querySelectorAll<HTMLButtonElement>('button')
+    buttons?.[Math.min(index, buttons.length - 1)]?.focus()
   } catch (cause) {
     forgetError.value = errorMessage(cause)
+  } finally {
+    forgetting.value = ''
   }
 }
 
+const rotating = ref(false)
 const rotateError = ref('')
 async function rotate() {
+  rotating.value = true
   rotateError.value = ''
   try {
     await $fetch(`${base}/token`, { method: 'POST', body: {} })
     await refresh()
   } catch (cause) {
     rotateError.value = errorMessage(cause)
+  } finally {
+    rotating.value = false
   }
 }
 </script>
@@ -231,6 +237,11 @@ async function rotate() {
   <AppPage
     title="Translations"
     :aside-title="slots.aside ? 'Key' : 'Delivery'"
+    :aside-name="asideName"
+    :aside-close="
+      slots.aside ? { path: `/p/${project}/translations`, query: route.query } : undefined
+    "
+    aside-mono
     failed="Could not load this project's translations."
     :error="notStarted ? undefined : error"
     :retry="refresh"
@@ -248,23 +259,10 @@ async function rotate() {
     <template v-if="space" #lead>
       <AppLead :title="headline">
         <template #meta>
-          {{ plural(space.keys.length, 'key') }} · {{ formatCount(space.live.length) }} of
+          {{ formatCount(space.live.length) }} of
           {{ plural(space.locales.length, 'language') }} live · source
           <span class="font-mono">{{ source }}</span>
         </template>
-        <div v-if="space.unpublished" class="cluster gap-2">
-          <button
-            type="button"
-            class="btn"
-            data-variant="primary"
-            :disabled="publishing"
-            :aria-busy="publishing || undefined"
-            @click="publish"
-          >
-            Publish
-          </button>
-        </div>
-        <AppAlert v-if="publishError" title="Could not publish.">{{ publishError }}</AppAlert>
       </AppLead>
     </template>
     <!-- What the audit found, as the inbox's filters: one choice at a time, with its count. -->
@@ -305,7 +303,7 @@ async function rotate() {
       <NuxtLink :to="`/p/${project}`" class="link">the project's page</NuxtLink>.
     </EmptyState>
     <!-- What a site's code asks for in vain: its build fails until each one is made. -->
-    <AppSection v-if="asked.length" title="Asked for, not there">
+    <AppSection v-if="asked.length" title="Missing keys">
       <DataTable>
         <thead>
           <tr>
@@ -460,7 +458,11 @@ async function rotate() {
         </tbody>
       </DataTable>
       <EmptyState v-else-if="space.keys.length">{{
-        q ? `No key matches “${q}” here.` : 'Nothing to check here.'
+        q
+          ? `No key matches “${q}” here.`
+          : filter === 'unused'
+            ? "Every key is in a site's code."
+            : 'Nothing to check here.'
       }}</EmptyState>
       <EmptyState v-else>No keys yet. Add one, or import a language file you have.</EmptyState>
     </AppSection>
@@ -468,14 +470,10 @@ async function rotate() {
     <template v-if="space" #aside>
       <slot v-if="slots.aside" name="aside" />
       <template v-else>
-        <AppSection title="Publish">
-          <p class="text-s text-muted">
-            <template v-if="space.publishedAt"
-              >Sites get version {{ space.version }}, published
-              {{ formatTime(space.publishedAt) }}.</template
-            >
-            <template v-else>Nothing published yet: sites get a 404.</template>
-            {{ space.unpublished ? 'The texts have changed since.' : '' }}
+        <!-- The button beside what it changes; what sites get now is the History's. -->
+        <AppSection v-if="space.unpublished || !space.publishedAt" title="Publish">
+          <p v-if="!space.publishedAt" class="text-s text-muted">
+            Nothing published yet: sites get a 404.
           </p>
           <p v-if="adds.length" class="text-s text-muted">
             Publishing starts delivering
@@ -491,11 +489,24 @@ async function rotate() {
             >
           </p>
           <p v-if="problems && space.unpublished" class="text-s text-muted">
-            {{ plural(problems, 'key') }} still to check. Publishing delivers them as they are.
+            Publishing delivers them as they are.
           </p>
+          <div v-if="space.unpublished" class="cluster gap-2">
+            <button
+              type="button"
+              class="btn"
+              data-variant="primary"
+              :disabled="publishing"
+              :aria-busy="publishing || undefined"
+              @click="publish"
+            >
+              Publish
+            </button>
+          </div>
+          <AppAlert v-if="publishError" title="Could not publish.">{{ publishError }}</AppAlert>
         </AppSection>
 
-        <AppSection v-if="space.versions.length > 1" title="History">
+        <AppSection v-if="space.versions.length" title="History">
           <ul class="stack gap-2 text-s" data-variant="plain">
             <li
               v-for="item in space.versions.slice(0, 6)"
@@ -507,7 +518,14 @@ async function rotate() {
                 <span class="text-muted">· {{ formatTime(item.publishedAt) }}</span></span
               >
               <span v-if="item.version === space.version" class="text-muted">Sites get this</span>
-              <button v-else type="button" class="link" @click="republish(item.version)">
+              <button
+                v-else
+                type="button"
+                class="link"
+                :disabled="republishing"
+                :aria-busy="(republishing && again === item.version) || undefined"
+                @click="askAgain(item.version)"
+              >
                 Publish again
               </button>
             </li>
@@ -515,27 +533,43 @@ async function rotate() {
           <AppAlert v-if="republishError" title="Could not publish it again.">{{
             republishError
           }}</AppAlert>
+          <ConfirmDialog
+            v-model:open="confirmingAgain"
+            :title="`Publish version ${again} again?`"
+            confirm-label="Publish again"
+            @confirm="republish"
+          >
+            <template #description
+              >Sites get its texts as the next version, in place of what they get now.</template
+            >
+          </ConfirmDialog>
         </AppSection>
 
         <AppSection title="Sites">
           <p v-if="!space.consumers.length" class="text-s text-muted">
-            No site has reported yet. A site's build runs sync in CI, which reports the keys its
-            code uses: then keys no code uses show as "Not in code".
+            No site has reported yet: sync in a site's CI reports the keys its code uses.
           </p>
-          <ul v-else class="stack gap-3 text-s" data-variant="plain">
-            <li v-for="consumer in space.consumers" :key="consumer.name" class="stack gap-1">
+          <ul v-else ref="sitesList" class="stack gap-3 text-s" data-variant="plain">
+            <li
+              v-for="(consumer, index) in space.consumers"
+              :key="consumer.name"
+              class="stack gap-1"
+            >
               <span class="cluster gap-3 justify-between">
                 <span class="font-mono weight-600">{{ consumer.name }}</span>
-                <button type="button" class="link text-muted" @click="forget(consumer.name)">
+                <button
+                  type="button"
+                  class="link text-muted"
+                  :disabled="!!forgetting"
+                  :aria-busy="forgetting === consumer.name || undefined"
+                  @click="forget(consumer.name, index)"
+                >
                   Forget
                 </button>
               </span>
               <span class="text-muted"
                 >Built with version {{ consumer.version }}, reported
                 {{ formatAge(consumer.reportedAt) }}</span
-              >
-              <StateDot v-if="consumer.missing" tone="warning"
-                >Asks for {{ missingKeys(consumer.missing) }}</StateDot
               >
               <StateDot v-if="consumer.sync < SYNC_VERSION" tone="warning"
                 >Its sync script is old: fetch it again</StateDot
@@ -544,23 +578,6 @@ async function rotate() {
           </ul>
           <AppAlert v-if="forgetError" title="Could not forget the site.">{{
             forgetError
-          }}</AppAlert>
-        </AppSection>
-
-        <AppSection title="Setup">
-          <p class="text-s text-muted">
-            A site's build runs sync before it builds: it checks every <code>t('…')</code>, fetches
-            the published texts, their key types and the client, and in CI reports the keys it uses.
-            The build token is a secret for CI and developers, never for a page.
-          </p>
-          <EmbedCode :code="buildSnippet" />
-          <p class="text-s text-muted">
-            The site starts with what its build fetched and takes newer published versions as it
-            runs. Published texts need no token: <code>{{ api }}</code> is open.
-          </p>
-          <EmbedCode :code="siteSnippet" />
-          <AppAlert v-if="rotateError" title="Could not replace the build token.">{{
-            rotateError
           }}</AppAlert>
         </AppSection>
       </template>
@@ -572,11 +589,14 @@ async function rotate() {
         label="Replace the build token"
         title="Replace the build token?"
         confirm-label="Replace token"
+        :pending="rotating"
         @confirm="rotate"
       >
-        Builds that sync with the old one can no longer read drafts or report until they use the new
-        one. Sites keep reading the published texts: they need no token.
+        Sites keep reading the published texts: they need no token.
       </DangerAction>
+      <AppAlert v-if="rotateError" title="Could not replace the build token.">{{
+        rotateError
+      }}</AppAlert>
     </template>
   </AppPage>
 </template>

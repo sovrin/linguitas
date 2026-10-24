@@ -109,13 +109,13 @@ export const linguitas: NexitasModule = {
         figure: formatCount(keys.length),
       },
       ...(problems
-        ? [{ text: `${formatCount(problems)} to check`, tone: 'warning' as const }]
+        ? [{ text: `${plural(problems, 'key')} to check`, tone: 'warning' as const }]
         : []),
       ...(asked
         ? [{ text: `The code asks for ${missingKeys(asked)}`, tone: 'warning' as const }]
         : []),
       ...(isUnpublished(db, projectId, space)
-        ? [{ text: 'Changes not published', tone: 'warning' as const }]
+        ? [{ text: 'Changes wait to be published', tone: 'warning' as const }]
         : []),
     ]
   },
