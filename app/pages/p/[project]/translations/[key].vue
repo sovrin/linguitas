@@ -4,7 +4,8 @@ import type { TextKey } from '../../../../../shared/contracts'
 import KeyTree from '../../../../components/KeyTree.vue'
 
 // One key, opened beside the tree it sits in: its texts in every language stacked in the
-// inspector, any number of them, and deleting it at the inspector's foot.
+// inspector, any number of them, and deleting it at the inspector's foot. A node in between that
+// is no key yet (checkout.form) opens here too, to be given texts and so become one.
 const route = useRoute()
 const project = useProject().id.value
 const name = route.params.key as string
@@ -13,12 +14,16 @@ const base = `/api/p/${project}/translations/keys/${name}`
 // what is typed.
 const { data, error, refresh } = await useProjectFetch<{
   locales: string[]
-  key: TextKey
+  /** Null for a node in between that has no texts yet. */
+  key: TextKey | null
   usedBy: string[] | null
 }>(`/translations/keys/${name}`, { live: false })
 
 const savedNotice = ref(false)
-async function saved() {
+async function saved(saved: TextKey) {
+  // The form lets a new key's name be changed; then it is that key that opens.
+  if (saved.key !== name)
+    return navigateTo({ path: `/p/${project}/translations/${saved.key}`, query: route.query })
   await Promise.all([refresh(), refreshNuxtData()])
   savedNotice.value = true
 }
@@ -39,7 +44,16 @@ async function remove() {
   <KeyTree :selected="name">
     <template #aside>
       <AppAlert v-if="error" title="Could not load this key.">{{ errorMessage(error) }}</AppAlert>
-      <template v-else-if="data">
+      <template v-else-if="data && !data.key">
+        <div class="stack gap-1">
+          <p class="font-mono weight-600 break-words">{{ name }}</p>
+          <p class="text-s text-muted">
+            No texts yet. Write one, and the keys below get it as their parent.
+          </p>
+        </div>
+        <KeyForm :project-id="project" :locales="data.locales" :name="name" @saved="saved" />
+      </template>
+      <template v-else-if="data?.key">
         <div class="stack gap-1">
           <p class="font-mono weight-600 break-words">{{ name }}</p>
           <p class="text-s text-muted">Saved {{ formatTime(data.key.updatedAt) }}</p>
@@ -62,7 +76,7 @@ async function remove() {
         />
       </template>
     </template>
-    <template v-if="data" #danger>
+    <template v-if="data?.key" #danger>
       <span>Removes the key and its texts in every language.</span>
       <DangerAction label="Delete key" :title="`Delete ${name}?`" @confirm="remove">
         Its texts in every language go with it. Sites keep it until the next publish.

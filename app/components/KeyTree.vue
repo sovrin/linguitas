@@ -335,6 +335,18 @@ async function rotate() {
         <button type="button" class="link" @click="unfoldAll">Unfold all</button>
         <button type="button" class="link" @click="foldAll">Fold all</button>
       </template>
+      <!-- What the squares in the language columns mean. Each square already names its state to a
+           screen reader, so this is for the eye. -->
+      <p
+        v-if="shown.length && targets.length"
+        class="cluster gap-4 text-xs text-muted"
+        aria-hidden="true"
+      >
+        <span v-for="(word, state) in STATE_WORDS" :key="state" class="cluster gap-2 flex-nowrap"
+          ><span class="lang-state" :data-state="state"></span>{{ word }}</span
+        >
+        <span>A group shows the worst below it.</span>
+      </p>
       <DataTable v-if="shown.length">
         <thead>
           <tr>
@@ -382,18 +394,17 @@ async function rotate() {
                     :data-icon="isOpen(row.node) ? 'chevron-down' : 'chevron-right'"
                     aria-hidden="true"
                   ></i>
-                  <span v-if="!row.node.key" class="font-mono text-s nowrap"
-                    ><span v-if="row.parent" class="sr-only">{{ row.parent }}.</span
-                    >{{ row.node.label }}</span
+                  <span class="sr-only"
+                    >{{ isOpen(row.node) ? 'Fold' : 'Unfold' }} {{ row.node.path }}</span
                   >
-                  <span v-else class="sr-only">Fold {{ row.node.path }}</span>
                 </button>
                 <span v-else class="key-spacer" aria-hidden="true"></span>
-                <!-- The eye sees the last segment; a screen reader hears the whole key. -->
+                <!-- The eye sees the last segment; a screen reader hears the whole key. Every
+                     node opens, one in between too: without a text yet, it opens to get one. -->
                 <NuxtLink
-                  v-if="row.node.key"
                   :to="{ path: `/p/${project}/translations/${row.node.path}`, query: route.query }"
                   class="link font-mono text-s nowrap"
+                  :class="{ 'text-muted': !row.node.key }"
                   data-quiet
                   ><span v-if="row.parent" class="sr-only">{{ row.parent }}.</span
                   >{{ row.node.label }}</NuxtLink
