@@ -80,7 +80,7 @@ function confirm() {
                 >
               </StateDot>
             </td>
-            <td data-num>{{ filled(l) }} of {{ space.keys.length }}</td>
+            <td data-num class="nowrap">{{ filled(l) }} of {{ space.keys.length }}</td>
             <td>
               <span v-if="l !== space.source" class="cluster gap-2 justify-end">
                 <template v-if="space.live.includes(l)">

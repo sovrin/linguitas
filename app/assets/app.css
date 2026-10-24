@@ -42,6 +42,11 @@
   justify-items: start;
 }
 
+/* The strip's column takes only its squares' width, so the source text gets the rest. */
+.lang-col {
+  inline-size: 1%;
+}
+
 /* One language's state, by shape as well as colour: filled is translated, half (in the warning
    tone) is to check, an empty outline is missing. */
 .lang-state {

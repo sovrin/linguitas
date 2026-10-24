@@ -353,7 +353,7 @@ async function rotate() {
               <span class="font-mono">{{ source }}</span
               ><span class="text-muted"> · source</span>
             </th>
-            <th v-if="targets.length" scope="col">
+            <th v-if="targets.length" scope="col" class="lang-col">
               <!-- The codes over their squares: the same grid as every row's strip. -->
               <span class="lang-strip">
                 <span
