@@ -21,7 +21,13 @@ import {
   setLive,
   updateKey,
 } from '../../server/core/translations'
-import { listConsumers, listUsage, removeConsumer, saveReport } from '../../server/core/usage'
+import {
+  listConsumers,
+  listUsage,
+  MAX_CONSUMERS,
+  removeConsumer,
+  saveReport,
+} from '../../server/core/usage'
 
 const dirs: string[] = []
 const dbs: DatabaseSync[] = []
@@ -97,6 +103,21 @@ describe('usage', () => {
 
     removeConsumer(db, 'sonotas', 'ios')
     expect(listUsage(db, 'sonotas')).toEqual({ total: ['web'] })
+  })
+
+  it('keeps a report that changed nothing quietly, and caps how many consumers there are', () => {
+    const db = database()
+    expect(saveReport(db, 'sonotas', report('web', ['pay', 'total']), 1000)).toBe('changed')
+    expect(saveReport(db, 'sonotas', report('web', ['total', 'pay', 'pay']), 2000)).toBe(
+      'unchanged',
+    )
+    expect(listConsumers(db, 'sonotas')[0]!.reportedAt).toBe(2000)
+    expect(saveReport(db, 'sonotas', report('web', ['pay']), 3000)).toBe('changed')
+
+    for (let i = 1; i < MAX_CONSUMERS; i++) saveReport(db, 'sonotas', report(`site-${i}`, []))
+    expect(saveReport(db, 'sonotas', report('one-more', ['pay']))).toBe('full')
+    expect(listConsumers(db, 'sonotas')).toHaveLength(MAX_CONSUMERS)
+    expect(saveReport(db, 'sonotas', report('web', ['total']))).toBe('changed')
   })
 
   it('accepts only names and keys it can store', () => {

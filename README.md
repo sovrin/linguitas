@@ -98,6 +98,10 @@ the tab is shown again, on a server every minute. A version's files never change
 good; checking for a new one is a `304` while nothing changed. It keeps nothing in storage and
 reports nothing: a build reports, browsers never do.
 
+**Texts are plain text, never HTML.** `t()` returns what was typed in the admin, as it was typed.
+Render it as text (`{{ t('…') }}`, `textContent`), never as HTML (`v-html`, `innerHTML`): anyone
+who can edit a text could otherwise put markup and script into the site.
+
 ## Delivery API
 
 Published texts are open: no token, any origin. They are in every page that shows them anyway.
@@ -121,6 +125,9 @@ The build token, sent as `Authorization: Bearer`, is for builds only:
 | `GET /v1/translations/:project/draft`   | `{ version, source, texts }`, every language as it is now        |
 | `GET …/:project/draft/keys.d.ts`        | the draft's keys, typed                                          |
 | `POST /v1/translations/:project/report` | `{ consumer, version, sync, keys }`: the keys a site's code uses |
+
+A project takes 60 reports an hour (then `429`) and keeps 50 consumers: a report from a new one
+beyond that is a `409` until one is forgotten under Sites.
 
 ## Admin API
 

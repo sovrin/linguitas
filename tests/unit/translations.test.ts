@@ -105,6 +105,14 @@ describe('translations', () => {
     expect(countProblems([key], ['en', 'fr'])).toBe(0)
   })
 
+  it('skips what a file nests deeper than it reads', () => {
+    let deep: Record<string, unknown> = { text: 'Deep' }
+    for (let i = 0; i < 25; i++) deep = { n: deep }
+    const { strings, skipped } = flatten({ ok: 'Fine', deep })
+    expect(strings).toEqual({ ok: 'Fine' })
+    expect(skipped).toEqual([`deep${'.n'.repeat(20)}`])
+  })
+
   it('imports nested files, adding the keys it lacks', () => {
     const db = database()
     const { strings, skipped } = flatten({

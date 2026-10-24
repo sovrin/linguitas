@@ -5,15 +5,49 @@ import type { DatabaseSync } from 'node:sqlite'
 import { transaction } from '#nexitas/server/core/database'
 import type { Consumer, Report } from '../../shared/contracts'
 
-/** Keeps a consumer's report: the version it built with and every key its code uses. */
-export function saveReport(db: DatabaseSync, projectId: string, report: Report, now = Date.now()) {
-  transaction(db, () => {
+/** How many consumers a project keeps: the report route is open to anyone with the build token,
+ *  so a leaked one cannot fill the database with names. */
+export const MAX_CONSUMERS = 50
+
+/** Keeps a consumer's report: the version it built with and every key its code uses. Answers
+ *  'full' for a new consumer once the project has MAX_CONSUMERS (and keeps nothing), else whether
+ *  the report changed what is stored, its time aside. */
+export function saveReport(
+  db: DatabaseSync,
+  projectId: string,
+  report: Report,
+  now = Date.now(),
+): 'full' | 'changed' | 'unchanged' {
+  return transaction(db, () => {
+    const last = db
+      .prepare(
+        'SELECT version, sync FROM translation_consumers WHERE project_id = ? AND consumer = ?',
+      )
+      .get(projectId, report.consumer) as { version: number; sync: number } | undefined
+    if (!last) {
+      const { count } = db
+        .prepare('SELECT count(*) AS count FROM translation_consumers WHERE project_id = ?')
+        .get(projectId) as { count: number }
+      if (count >= MAX_CONSUMERS) return 'full'
+    }
+    const stored = db
+      .prepare(
+        'SELECT key FROM translation_usage WHERE project_id = ? AND consumer = ? ORDER BY key',
+      )
+      .all(projectId, report.consumer) as unknown as { key: string }[]
+    // Keys are ASCII, so JavaScript's sort orders them as SQLite does.
+    const changed =
+      !last ||
+      last.version !== report.version ||
+      last.sync !== report.sync ||
+      stored.map((row) => row.key).join() !== [...new Set(report.keys)].sort().join()
     db.prepare(
       `INSERT INTO translation_consumers (project_id, consumer, version, sync, reported_at)
       VALUES (?, ?, ?, ?, ?)
       ON CONFLICT (project_id, consumer) DO UPDATE
       SET version = excluded.version, sync = excluded.sync, reported_at = excluded.reported_at`,
     ).run(projectId, report.consumer, report.version, report.sync, now)
+    if (!changed) return 'unchanged'
     db.prepare('DELETE FROM translation_usage WHERE project_id = ? AND consumer = ?').run(
       projectId,
       report.consumer,
@@ -22,6 +56,7 @@ export function saveReport(db: DatabaseSync, projectId: string, report: Report, 
       'INSERT OR IGNORE INTO translation_usage (project_id, consumer, key) VALUES (?, ?, ?)',
     )
     for (const key of report.keys) add.run(projectId, report.consumer, key)
+    return 'changed'
   })
 }
 

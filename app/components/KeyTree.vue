@@ -235,7 +235,7 @@ async function rotate() {
             current: filter === 'all',
           },
           ...(Object.keys(CHECKS) as Check[]).map((check) => ({
-            label: `${CHECKS[check]} ${space.checks[check]}`,
+            label: `${CHECKS[check]} ${space!.checks[check]}`,
             to: within({ check }),
             current: filter === check,
           })),

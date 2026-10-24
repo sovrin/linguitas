@@ -97,15 +97,18 @@ export const countProblems = (keys: TextKey[], locales: string[]) =>
   keys.filter((key) => locales.some((locale) => audit(key, locale, locales[0]!).some(isProblem)))
     .length
 
-/** A file's texts by dotted key: nested objects are joined with dots. What is not a text, or not a
- *  valid key, is named in `skipped`. */
-export function flatten(strings: Record<string, unknown>, prefix = '') {
+/** How deep a file's objects may nest. */
+const MAX_DEPTH = 20
+
+/** A file's texts by dotted key: nested objects are joined with dots. What is not a text, not a
+ *  valid key, or nested deeper than MAX_DEPTH, is named in `skipped`. */
+export function flatten(strings: Record<string, unknown>, prefix = '', depth = 0) {
   const out: Record<string, string> = {}
   const skipped: string[] = []
   for (const [name, value] of Object.entries(strings)) {
     const key = prefix ? `${prefix}.${name}` : name
-    if (value && typeof value === 'object' && !Array.isArray(value)) {
-      const inner = flatten(value as Record<string, unknown>, key)
+    if (value && typeof value === 'object' && !Array.isArray(value) && depth < MAX_DEPTH) {
+      const inner = flatten(value as Record<string, unknown>, key, depth + 1)
       Object.assign(out, inner.strings)
       skipped.push(...inner.skipped)
     } else if (typeof value === 'string' && isKey(key)) out[key] = value

@@ -121,7 +121,7 @@ export function treeRows(
     const under = keysUnder(node)
     const leaf = node.key && !node.children.length ? node.key : undefined
     const states = Object.fromEntries(
-      targets.map((locale) => {
+      targets.map((locale): [string, State] => {
         if (leaf) return [locale, stateOf(leaf, locale, source)]
         const below = under.map((key) => stateOf(key, locale, source))
         return [
