@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import type { DatabaseSync } from 'node:sqlite'
 import { afterEach, describe, expect, it } from 'vitest'
 import { openDatabase } from '#nexitas/server/core/database'
-import { keyTree, keysUnder } from '../../app/lib/translations'
+import { filterKeys, keyTree, keysUnder, treeRows } from '../../shared/tree'
 import { createProject, deleteProject } from '#nexitas/server/core/projects'
 import {
   audit,
@@ -223,6 +223,34 @@ describe('key tree', () => {
     expect(tree.map((node) => [node.label, node.path])).toEqual([
       ['nav', 'nav'],
       ['checkout.form.errors.email', 'checkout.form.errors.email'],
+    ])
+  })
+
+  it('sends the top level and the children of open nodes only, each summed up', () => {
+    const text = (value: string) => ({ text: value, basedOn: 'Home', updatedAt: 0 })
+    const keys = [
+      { key: 'nav.home', note: '', texts: { en: text('Home'), de: text('Start') }, updatedAt: 0 },
+      { key: 'nav.menu.open', note: '', texts: { en: text('Open') }, updatedAt: 0 },
+      { key: 'title', note: '', texts: { en: text('Radio') }, updatedAt: 0 },
+    ]
+    const folded = treeRows(keys, [], ['en', 'de'])
+    expect(Object.keys(folded)).toEqual([''])
+    expect(folded['']!.map((row) => [row.path, row.branch, row.below, row.states.de])).toEqual([
+      ['nav', true, 2, 'missing'],
+      ['title', false, 1, 'missing'],
+    ])
+    // A joined chain ("menu.open") is one row; a path that is no node is left out.
+    const open = treeRows(keys, ['nav', 'nav.menu', 'gone'], ['en', 'de'])
+    expect(Object.keys(open)).toEqual(['', 'nav'])
+    expect(open.nav!.map((row) => [row.label, row.states.de])).toEqual([
+      ['home', 'done'],
+      ['menu.open', 'missing'],
+    ])
+    const search = { filter: 'all' as const, locales: ['en', 'de'], used: new Set(['title']) }
+    expect(filterKeys(keys, { ...search, q: 'radio' }).map((k) => k.key)).toEqual(['title'])
+    expect(filterKeys(keys, { ...search, q: '', filter: 'unused' }).map((k) => k.key)).toEqual([
+      'nav.home',
+      'nav.menu.open',
     ])
   })
 })

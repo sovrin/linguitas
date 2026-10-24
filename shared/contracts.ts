@@ -161,7 +161,18 @@ export interface TranslationSpace {
   live: string[]
   /** The ones sites get now, from the last publish. */
   delivered: string[]
-  keys: TextKey[]
+  /** How many keys there are; the tree's rows come one level at a time (`/translations/tree`). */
+  keyCount: number
+  /** By language, how many keys have a text in it. */
+  filled: Record<string, number>
+  /** By audit check, how many keys have it in any language. */
+  checks: Record<Check, number>
+  /** How many keys have a problem in a live language (countProblems). */
+  problems: number
+  /** How many keys no site's code uses. */
+  unused: number
+  /** Keys a site's code uses that do not exist, with the sites asking: their builds fail. */
+  asked: { key: string; consumers: string[] }[]
   /** The last publish, if any. */
   version: number
   publishedAt: number | null
@@ -171,7 +182,4 @@ export interface TranslationSpace {
   versions: { version: number; publishedAt: number }[]
   /** The sites that reported which keys they use. */
   consumers: Consumer[]
-  /** By key, the consumers that use it; a key no consumer uses is not here. Keys that do not
-   *  exist are here too: the code asks for them. */
-  usage: Record<string, string[]>
 }

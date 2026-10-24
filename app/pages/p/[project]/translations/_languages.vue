@@ -12,7 +12,7 @@ const {
   refresh,
 } = await useProjectFetch<TranslationSpace>('/translations')
 
-const filled = (locale: string) => space.value?.keys.filter((key) => key.texts[locale]).length ?? 0
+const filled = (locale: string) => space.value?.filled[locale] ?? 0
 const delivered = (locale: string) => space.value?.delivered.includes(locale) ?? false
 
 const { pending, error, issues, fieldError, submit } = useSubmit()
@@ -80,7 +80,7 @@ function confirm() {
                 >
               </StateDot>
             </td>
-            <td data-num class="nowrap">{{ filled(l) }} of {{ space.keys.length }}</td>
+            <td data-num class="nowrap">{{ filled(l) }} of {{ space.keyCount }}</td>
             <td>
               <span v-if="l !== space.source" class="cluster gap-2 justify-end">
                 <template v-if="space.live.includes(l)">

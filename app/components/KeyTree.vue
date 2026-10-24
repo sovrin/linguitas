@@ -4,13 +4,10 @@ import {
   CHECKS,
   SYNC_VERSION,
   missingKeys,
-  audit,
-  countProblems,
   type Check,
-  type TextKey,
   type TranslationSpace,
 } from '../../shared/contracts'
-import { keyTree, keysUnder, type KeyNode } from '../lib/translations'
+import type { Filter, State, TreeRow } from '../../shared/tree'
 
 /** <KeyTree :selected="key"><template #aside>…</template></KeyTree>
  *  A project's translations as one tree of keys at their dots, any depth: each key with its source
@@ -23,16 +20,10 @@ const props = defineProps<{ selected?: string; asideName?: string }>()
 const slots = useSlots()
 const project = useProject().id.value
 const base = `/api/p/${project}/translations`
-const { data: space, error, refresh } = await useProjectFetch<TranslationSpace>('/translations')
-// The project exists (the core's /p/[project] saw to that), so a 404 means not started.
-const notStarted = computed(() => error.value?.statusCode === 404)
-const source = computed(() => space.value?.source ?? '')
-const checksOf = (key: TextKey, locale: string) => audit(key, locale, source.value)
 // Which keys show: an audit finding and a search, both in the address like the inbox's filters,
-// so a reload, the back button and an opened key keep them.
+// so a reload, the back button and an opened key keep them. Besides the audit's checks, `unused`:
+// keys no site's code uses, once a site has reported.
 const route = useRoute()
-// Besides the audit's checks, `unused`: keys no site's code uses, once a site has reported.
-type Filter = 'all' | Check | 'unused'
 const filter = computed<Filter>(() => {
   const asked = route.query.check
   if (asked === 'unused') return 'unused'
@@ -49,81 +40,61 @@ const within = (next: { check?: Filter; q?: string }) => {
 const searchText = ref(q.value)
 watch(q, (value) => (searchText.value = value))
 const search = () => navigateTo(within({ q: searchText.value.trim() }))
-// A search matches a key's name or its source text, ignoring case.
-const matches = (key: TextKey) => {
-  if (!q.value) return true
-  const term = q.value.toLowerCase()
-  return (
-    key.key.toLowerCase().includes(term) ||
-    (key.texts[source.value]?.text.toLowerCase().includes(term) ?? false)
-  )
-}
-const has = (key: TextKey, check: Check) =>
-  space.value!.locales.some((locale) => checksOf(key, locale).includes(check))
-const count = (check: Check) => space.value?.keys.filter((key) => has(key, check)).length ?? 0
-const used = (key: TextKey) => !!space.value?.usage[key.key]
-const unused = computed(() => space.value?.keys.filter((key) => !used(key)).length ?? 0)
-const reported = computed(() => !!space.value?.consumers.length)
-const shown = computed(
-  () =>
-    space.value?.keys.filter((key) => {
-      if (!matches(key)) return false
-      if (filter.value === 'all') return true
-      if (filter.value === 'unused') return !used(key)
-      return has(key, filter.value)
-    }) ?? [],
+// The tree opens folded, a search's or an audit tab's too, and only what is unfolded is fetched:
+// the top level and the children of each open group. What is open lasts while the owner moves
+// between the list and its keys, not past a reload.
+const opened = useState<string[]>(`linguitas-open-${project}`, () => [])
+// The key in hand stays in sight: the groups it is in unfold. A step that is no node (inside a
+// joined chain like "form.errors") is simply not in the answer.
+watch(
+  () => props.selected,
+  (key) => {
+    const steps = key?.split('.').slice(0, -1) ?? []
+    const paths = steps.map((_, index) => steps.slice(0, index + 1).join('.'))
+    if (paths.some((path) => !opened.value.includes(path)))
+      opened.value = [...new Set([...opened.value, ...paths])]
+  },
+  { immediate: true },
 )
-// Keys a site's code uses that do not exist: its build fails until they do.
-const asked = computed(() => {
-  if (!space.value) return []
-  const known = new Set(space.value.keys.map((key) => key.key))
-  return Object.entries(space.value.usage)
-    .filter(([key]) => !known.has(key))
-    .map(([key, consumers]) => ({ key, consumers }))
-})
-// The keys as a tree at their dots, any depth. A group folds; an audit tab or a search shows every
-// match open, so nothing it found stays folded away.
-const tree = computed(() => keyTree(shown.value))
-const collapsed = ref(new Set<string>())
-const narrowed = computed(() => filter.value !== 'all' || !!q.value)
-const isOpen = (node: KeyNode) => narrowed.value || !collapsed.value.has(node.path)
-function toggle(node: KeyNode) {
-  const next = new Set(collapsed.value)
-  if (!next.delete(node.path)) next.add(node.path)
-  collapsed.value = next
+const [{ data: space, error, refresh }, { data: tree, status: treeStatus, refresh: refreshTree }] =
+  await Promise.all([
+    useProjectFetch<TranslationSpace>('/translations'),
+    useProjectFetch<Record<string, TreeRow[]>>('/translations/tree', {
+      query: {
+        open: opened,
+        check: computed(() => (filter.value === 'all' ? undefined : filter.value)),
+        q: computed(() => q.value || undefined),
+      },
+    }),
+  ])
+// The project exists (the core's /p/[project] saw to that), so a 404 means not started.
+const notStarted = computed(() => error.value?.statusCode === 404)
+const source = computed(() => space.value?.source ?? '')
+const reported = computed(() => !!space.value?.consumers.length)
+const asked = computed(() => space.value?.asked ?? [])
+const isOpen = (row: TreeRow) => !!tree.value?.[row.path]
+// The group being unfolded or folded, busy until its rows are in.
+const toggling = ref('')
+function toggle(row: TreeRow) {
+  toggling.value = row.path
+  // Folding a group folds what is open inside it, so that is not fetched any more either.
+  opened.value = isOpen(row)
+    ? opened.value.filter((path) => path !== row.path && !path.startsWith(`${row.path}.`))
+    : [...opened.value, row.path]
 }
-const branches = (nodes: KeyNode[]): string[] =>
-  nodes.flatMap((node) => (node.children.length ? [node.path, ...branches(node.children)] : []))
-const foldAll = () => (collapsed.value = new Set(branches(tree.value)))
-const unfoldAll = () => (collapsed.value = new Set())
-// What the owner folded stays folded on their next visit, in this browser only: a convenience,
-// so a browser that keeps nothing simply opens everything.
-const foldedKey = `linguitas-folded-${project}`
-onMounted(() => {
-  try {
-    const kept = localStorage.getItem(foldedKey)
-    if (kept) collapsed.value = new Set(JSON.parse(kept) as string[])
-  } catch {}
-  watch(collapsed, (value) => {
-    try {
-      localStorage.setItem(foldedKey, JSON.stringify([...value]))
-    } catch {}
-  })
-})
 const rows = computed(() => {
-  const out: { node: KeyNode; depth: number; parent: string }[] = []
-  const walk = (nodes: KeyNode[], depth: number, parent: string) => {
-    for (const node of nodes) {
-      out.push({ node, depth, parent })
-      if (node.children.length && isOpen(node)) walk(node.children, depth + 1, node.path)
+  const out: { node: TreeRow; depth: number; parent: string }[] = []
+  const walk = (list: TreeRow[], depth: number, parent: string) => {
+    for (const row of list) {
+      out.push({ node: row, depth, parent })
+      const children = tree.value?.[row.path]
+      if (row.branch && children) walk(children, depth + 1, row.path)
     }
   }
-  walk(tree.value, 0, '')
+  walk(tree.value?.[''] ?? [], 0, '')
   return out
 })
-// One language of one key: translated, to check (what the audit finds, bar "same as source"),
-// or missing. A branch shows the worst of what is below it, so a gap shows before it is unfolded.
-type State = 'done' | 'check' | 'missing'
+// One language of one key: translated, to check, or missing; a group shows the worst below it.
 const STATE_WORDS: Record<State, string> = {
   done: 'translated',
   check: 'to check',
@@ -132,19 +103,7 @@ const STATE_WORDS: Record<State, string> = {
 const targets = computed(
   () => space.value?.locales.filter((locale) => locale !== source.value) ?? [],
 )
-function stateOf(key: TextKey, locale: string): State {
-  if (!key.texts[locale]) return 'missing'
-  return checksOf(key, locale).some((check) => check !== 'unchanged' && check !== 'missing')
-    ? 'check'
-    : 'done'
-}
-function branchState(node: KeyNode, locale: string): State {
-  const states = keysUnder(node).map((key) => stateOf(key, locale))
-  return states.includes('missing') ? 'missing' : states.includes('check') ? 'check' : 'done'
-}
-const problems = computed(() =>
-  space.value ? countProblems(space.value.keys, space.value.live) : 0,
-)
+const problems = computed(() => space.value?.problems ?? 0)
 // What needs the owner first: keys a build fails on, texts to check, then changes sites don't
 // have yet.
 const headline = computed(() => {
@@ -206,7 +165,7 @@ async function forget(consumer: string, index: number) {
   forgetError.value = ''
   try {
     await $fetch(`${base}/consumers/${consumer}/delete`, { method: 'POST', body: {} })
-    await refresh()
+    await Promise.all([refresh(), refreshTree()])
     await nextTick()
     const buttons = sitesList.value?.querySelectorAll<HTMLButtonElement>('button')
     buttons?.[Math.min(index, buttons.length - 1)]?.focus()
@@ -266,24 +225,24 @@ async function rotate() {
       </AppLead>
     </template>
     <!-- What the audit found, as the inbox's filters: one choice at a time, with its count. -->
-    <template v-if="space?.keys.length" #filters>
+    <template v-if="space?.keyCount" #filters>
       <FilterLinks
         label="Show"
         :options="[
           {
-            label: `All ${space.keys.length}`,
+            label: `All ${space.keyCount}`,
             to: within({ check: 'all' }),
             current: filter === 'all',
           },
           ...(Object.keys(CHECKS) as Check[]).map((check) => ({
-            label: `${CHECKS[check]} ${count(check)}`,
+            label: `${CHECKS[check]} ${space.checks[check]}`,
             to: within({ check }),
             current: filter === check,
           })),
           ...(reported
             ? [
                 {
-                  label: `Not in code ${unused}`,
+                  label: `Not in code ${space.unused}`,
                   to: within({ check: 'unused' }),
                   current: filter === 'unused',
                 },
@@ -329,14 +288,10 @@ async function rotate() {
     </AppSection>
     <!-- The keys take the room; publishing and how sites read them sit beside them. -->
     <AppSection v-if="space" title="Keys">
-      <template v-if="branches(tree).length && !narrowed" #actions>
-        <button type="button" class="link" @click="unfoldAll">Unfold all</button>
-        <button type="button" class="link" @click="foldAll">Fold all</button>
-      </template>
       <!-- What the squares in the language columns mean. Each square already names its state to a
            screen reader, so this is for the eye. -->
       <p
-        v-if="shown.length && targets.length"
+        v-if="rows.length && targets.length"
         class="cluster gap-4 text-xs text-muted"
         aria-hidden="true"
       >
@@ -345,7 +300,7 @@ async function rotate() {
         >
         <span>A group shows the worst below it.</span>
       </p>
-      <DataTable v-if="shown.length">
+      <DataTable v-if="rows.length">
         <thead>
           <tr>
             <th scope="col">Key</th>
@@ -378,13 +333,14 @@ async function rotate() {
             <td class="key-cell" :style="{ '--depth': row.depth }">
               <span class="cluster gap-2 flex-nowrap min-w-0">
                 <button
-                  v-if="row.node.children.length"
+                  v-if="row.node.branch"
                   type="button"
                   class="btn key-toggle"
                   data-size="s"
                   data-variant="ghost"
                   :aria-expanded="isOpen(row.node)"
-                  :disabled="narrowed"
+                  :disabled="treeStatus === 'pending' && toggling === row.node.path"
+                  :aria-busy="(treeStatus === 'pending' && toggling === row.node.path) || undefined"
                   @click="toggle(row.node)"
                 >
                   <i
@@ -407,8 +363,8 @@ async function rotate() {
                   ><span v-if="row.parent" class="sr-only">{{ row.parent }}.</span
                   >{{ row.node.label }}</NuxtLink
                 >
-                <span v-if="row.node.children.length" class="text-xs text-muted tabular nowrap">{{
-                  keysUnder(row.node).length
+                <span v-if="row.node.branch" class="text-xs text-muted tabular nowrap">{{
+                  row.node.below
                 }}</span>
               </span>
             </td>
@@ -432,32 +388,16 @@ async function rotate() {
                   :key="locale"
                   class="lang-state"
                   role="img"
-                  :data-state="
-                    row.node.key && !row.node.children.length
-                      ? stateOf(row.node.key, locale)
-                      : branchState(row.node, locale)
-                  "
-                  :aria-label="`${locale}: ${
-                    STATE_WORDS[
-                      row.node.key && !row.node.children.length
-                        ? stateOf(row.node.key, locale)
-                        : branchState(row.node, locale)
-                    ]
-                  }`"
-                  :data-tip="`${locale}: ${
-                    STATE_WORDS[
-                      row.node.key && !row.node.children.length
-                        ? stateOf(row.node.key, locale)
-                        : branchState(row.node, locale)
-                    ]
-                  }`"
+                  :data-state="row.node.states[locale]!"
+                  :aria-label="`${locale}: ${STATE_WORDS[row.node.states[locale]!]}`"
+                  :data-tip="`${locale}: ${STATE_WORDS[row.node.states[locale]!]}`"
                 ></span>
               </span>
             </td>
           </tr>
         </tbody>
       </DataTable>
-      <EmptyState v-else-if="space.keys.length">{{
+      <EmptyState v-else-if="space.keyCount">{{
         q
           ? `No key matches “${q}” here.`
           : filter === 'unused'
