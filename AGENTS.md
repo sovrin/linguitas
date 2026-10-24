@@ -9,7 +9,7 @@ Conventions for working on linguitas, in code and in the interface.
   the page shell are there, and plug-in points are its interfaces (`shared/modules.ts`). linguitas
   registers itself in `server/core/module.ts`. What every module needs belongs in nexitas; what only
   linguitas needs, here.
-- A project's translations belong to one nexitas project: its delivery token, its languages (one the
+- A project's translations belong to one nexitas project: its build token, its languages (one the
   source, each live or a draft), its keys with their texts, and what was last published. Its panel on a project's
   page is `app/components/global/LinguitasProject.vue`.
 - Import by relative path (or `#nexitas/...`): `~` and `#shared` resolve against nexitas, the app
@@ -31,9 +31,14 @@ Conventions for working on linguitas, in code and in the interface.
   removed language keeps its texts. The server enforces this, not only the Languages page.
 - `/api/p/<project>/translations/*` is the owner's (nexitas' security middleware), and its handlers
   take the project from `requestProject(event)`. The delivery API, `/v1/translations/*`,
-  is public through `publicRoutes` in `server/core/module.ts`: read-only, only what was published,
-  any origin, a project's bearer token. Sites and builds out there read it, so it only grows (nothing
+  is public through `publicRoutes` in `server/core/module.ts`: what was published is open to any
+  origin; drafts and a build's usage report take the build token. Sites and builds out there read
+  it, and old copies of the sync script and the client live on in them, so it only grows (nothing
   renamed or removed).
+- Sites use linguitas through `public/v1/translations/`: `sync.mjs` and `client.js` (with its
+  types), plain JavaScript that runs as sites run it. Every `t()` takes a literal key; sync fails on
+  anything else. When sync changes what it sends or expects, bump `SYNC_VERSION` (and the script's
+  `VERSION`, which a test keeps equal).
 - The admin is live: whatever changes what it shows calls `announceChange()`, and every view that
   shows data passes its refresh to `useLive`.
 

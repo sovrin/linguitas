@@ -1,6 +1,7 @@
 // Every rule about what linguitas accepts, and every check on what it holds, lives here, shared by
 // the admin pages and the server. The owner's sign-in and the projects are nexitas'.
 import { z } from 'zod'
+import { formatCount } from '#nexitas/app/lib/format'
 
 /** Keys are what sites look a text up by: words joined by dots, such as checkout.pay.button. They
  *  are addresses, so they never change once made. The first character is never _ or -, which the
@@ -113,6 +114,40 @@ export function flatten(strings: Record<string, unknown>, prefix = '') {
   return { strings: out, skipped }
 }
 
+/** The sync script's version. linguitas serves the script and names this version in its
+ *  manifest, so a site's copy can tell it is old; the script sends its own with a report. */
+export const SYNC_VERSION = 1
+
+/** What a site's build reports: who it is, the version it built with, and every key its code
+ *  uses. Keys that do not exist are welcome: they are what the code asks for in vain. */
+export const reportSchema = z
+  .object({
+    consumer: z
+      .string()
+      .regex(/^[a-z0-9][a-z0-9-]{0,39}$/, 'Name the site in lowercase letters, digits and -.'),
+    version: z.number().int().min(0),
+    sync: z.number().int().min(1),
+    keys: z.array(keySchema).max(20_000),
+  })
+  .strict()
+export type Report = z.infer<typeof reportSchema>
+
+/** A site that reported which keys it uses. */
+export interface Consumer {
+  name: string
+  /** The version it built with. */
+  version: number
+  /** Its sync script's version. */
+  sync: number
+  reportedAt: number
+  /** How many keys it uses that do not exist. */
+  missing: number
+}
+
+/** "1 key that does not exist", "3 keys that do not exist". */
+export const missingKeys = (count: number) =>
+  `${count === 1 ? '1 key that does' : `${formatCount(count)} keys that do`} not exist`
+
 /** What was published: each language's texts by key. Sites read one language of it. */
 export type Snapshot = Record<string, Record<string, string>>
 
@@ -132,4 +167,11 @@ export interface TranslationSpace {
   publishedAt: number | null
   /** Whether the texts differ from what was last published. */
   unpublished: boolean
+  /** Every version published, newest first. */
+  versions: { version: number; publishedAt: number }[]
+  /** The sites that reported which keys they use. */
+  consumers: Consumer[]
+  /** By key, the consumers that use it; a key no consumer uses is not here. Keys that do not
+   *  exist are here too: the code asks for them. */
+  usage: Record<string, string[]>
 }

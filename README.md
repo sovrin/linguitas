@@ -8,7 +8,7 @@ it on as Translations. nexitas brings the sign-in, the page shell, the database 
 linguitas adds:
 
 - **translations per project**: its languages (the source first), its keys with a text in each, what
-  was last published, and a read token for its sites;
+  was published (every version), and a build token for the sites' builds;
 - the admin pages under Translations: every key in every language with what the audit finds, a
   key's texts, the languages, an import and publishing;
 - a Translations panel on each project's page: start them, see what is left to check;
@@ -44,24 +44,83 @@ owner         ── /p/<project>/translations                 keys × languages
 A translation remembers the source text it was written for. When the source changes, it is stale
 until it is changed, or confirmed on its key's page ("Still fits the source").
 
-## Delivery API
+## Sites: sync and the client
 
-Read-only. Only what was published. Every request needs the project's token, which its Translations
-page shows (and can replace). Any origin may call it.
+A site uses linguitas through two files linguitas serves, so nothing is published to npm:
 
-```bash
-curl -H "Authorization: Bearer $TOKEN" https://nexitas.example.com/v1/translations/<project>/de
+- **sync** (`/v1/translations/sync.mjs`), copied into the site once, runs before every build.
+- **the client** (`client.js` with its types), which sync writes into the site with the texts.
+
+```sh
+curl -o scripts/linguitas.mjs https://nexitas.example.com/v1/translations/sync.mjs
+LINGUITAS_URL=https://nexitas.example.com LINGUITAS_PROJECT=<project> \
+LINGUITAS_TOKEN=<build token> node scripts/linguitas.mjs --consumer web
 ```
 
-| Request                             | Returns                                                         |
-| ----------------------------------- | --------------------------------------------------------------- |
-| `GET /v1/translations/:project`     | `{ slug, name, source, locales, version, publishedAt }`         |
-| `GET /v1/translations/:project/:lg` | `{ "checkout.pay": "Bezahlen", … }`, flat, keys sorted, no gaps |
+```ts
+import texts from './linguitas/texts.json'
+import { start, t, watch } from './linguitas/client'
 
-A language's file holds only the keys that have a text in it; fall back to the source in your i18n
-library. `locales` lists the published languages only. `401` means the token is wrong or the
-project has no translations. `404` means the language was not published. While Translations is
-switched off, every route answers `404`.
+start(texts, { locale: 'de' })
+watch({ url: 'https://nexitas.example.com/v1/translations/<project>' })
+t('checkout.pay') // "Bezahlen"
+t('export.done', { minutes: 3 }) // placeholders, typed by keys.d.ts
+```
+
+**The rule:** every `t()` takes a literal key, `t('nav.home')`, never one put together
+(``t(`nav.${item}`)``). A choice between keys is an `if`/`else` with one literal per branch. That
+way the build knows every key a site uses.
+
+**What sync does**, in order:
+
+1. **Scans** `--src` (default `app`) with the Vue compiler and the Babel parser the site already
+   has: scripts, Vue files and their templates. Only the `t` a file imports from `--from` counts
+   (default `linguitas/client`; a site's own wrapper, `--from utils/i18n`).
+2. **Fetches** into `--out` (default `app/linguitas`), to be committed:
+   - `texts.json`: every published language of the current version;
+   - `keys.d.ts`: every key with its placeholders, so a typo or a missing value is a type error;
+   - `client.js` and `client.d.ts`.
+
+   When linguitas cannot be reached, it warns and the build goes on with the committed files.
+
+3. **Fails** on a key that is not a literal, a key that does not exist, and a key that exists only
+   as a draft ("publish it"). A site never ships asking for a text nobody published.
+4. **Reports**, in CI only (`CI` set), the keys it found as `--consumer`, with the build token. The
+   Translations page then shows what no site uses ("Not in code") and what a site asks for that
+   does not exist, with "Create key".
+
+`--draft` (with the build token, refused in CI) fetches the texts as they are now, so a key works
+in development before it is published.
+
+**The client** starts with the build's texts, so `t()` works at once, offline, and if linguitas is
+down. `watch` picks up newer published versions while the site runs: in a browser on start and when
+the tab is shown again, on a server every minute. A version's files never change and are cached for
+good; checking for a new one is a `304` while nothing changed. It keeps nothing in storage and
+reports nothing: a build reports, browsers never do.
+
+## Delivery API
+
+Published texts are open: no token, any origin. They are in every page that shows them anyway.
+
+| Request                                      | Returns                                                       |
+| -------------------------------------------- | ------------------------------------------------------------- |
+| `GET /v1/translations/:project`              | `{ slug, name, source, locales, version, publishedAt, sync }` |
+| `GET /v1/translations/:project/:lg`          | `{ "checkout.pay": "Bezahlen", … }` of the current version    |
+| `GET /v1/translations/:project/:v/:lg.json`  | the same of version `v`, cached for good                      |
+| `GET /v1/translations/:project/:v/keys.d.ts` | version `v`'s keys, typed for the client                      |
+
+A language's file holds only the keys that have a text in it; the client falls back to the source.
+`locales` lists the published languages only. The first two answer with an `ETag`, so asking again
+is a `304` while nothing changed. `404` means there is nothing published there. A token sent along
+is ignored. While Translations is switched off, every route answers `404`.
+
+The build token, sent as `Authorization: Bearer`, is for builds only:
+
+| Request                                 | Does                                                             |
+| --------------------------------------- | ---------------------------------------------------------------- |
+| `GET /v1/translations/:project/draft`   | `{ version, source, texts }`, every language as it is now        |
+| `GET …/:project/draft/keys.d.ts`        | the draft's keys, typed                                          |
+| `POST /v1/translations/:project/report` | `{ consumer, version, sync, keys }`: the keys a site's code uses |
 
 ## Admin API
 
@@ -75,7 +134,9 @@ The admin pages use it, under the owner's session; writes come from nexitas' own
 | `POST /languages/:locale`                 | Put it live or take it offline `{ live }`                      |
 | `POST …/:locale/source` · `…/delete`      | Make a live one the source · remove a draft                    |
 | `POST /import`                            | One language file `{ locale, strings }`, flat or nested        |
-| `POST /publish` · `POST /token`           | Publish the texts as they are · replace the token              |
+| `POST /publish` · `POST /token`           | Publish the texts as they are · replace the build token        |
+| `POST /versions/:version/publish`         | Publish an earlier version again, as the next one              |
+| `POST /consumers/:consumer/delete`        | Forget a site, so its keys stop counting as used               |
 | `POST /keys`                              | Add one `{ key, note, texts: { [locale]: text } }`             |
 | `GET · POST /keys/:key` · `POST …/delete` | Read · replace `{ note, texts, confirmed: [locale] }` · delete |
 
@@ -99,7 +160,9 @@ nexitas (`pnpm check` there); here `pnpm check` runs the unit tests.
 ## Not here yet
 
 Linking to veritas (a field that is a key), plurals beyond what the text itself holds, export to
-PO or XLIFF, machine translation, older versions of a publish, users and roles.
+PO or XLIFF, machine translation, users and roles. Live updates pushed to sites' servers (they
+check instead), a deploy hook for static sites, and delivery that needs a token for confidential
+texts.
 
 ## Checks
 

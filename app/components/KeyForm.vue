@@ -3,10 +3,16 @@ import { CHECKS, audit, type TextKey } from '../../shared/contracts'
 
 /** Writes a new key, or edits `textKey`: its note and a text per language, the source first. Each
  *  translation shows what the audit finds as it is typed, as the server will store it. */
-const props = defineProps<{ projectId: string; locales: string[]; textKey?: TextKey }>()
+const props = defineProps<{
+  projectId: string
+  locales: string[]
+  textKey?: TextKey
+  /** A new key's name to start with: one a site's code asks for. */
+  name?: string
+}>()
 const emit = defineEmits<{ saved: [TextKey] }>()
 
-const name = ref(props.textKey?.key ?? '')
+const name = ref(props.textKey?.key ?? props.name ?? '')
 const note = ref(props.textKey?.note ?? '')
 const source = props.locales[0]!
 const texts = reactive<Record<string, string>>(
@@ -105,6 +111,7 @@ async function save() {
         <textarea
           :id="`text-${locale}`"
           v-model="texts[locale]"
+          data-size="s"
           class="input"
           rows="2"
           maxlength="10000"

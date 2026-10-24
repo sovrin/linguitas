@@ -323,10 +323,80 @@ export function snapshot(db: DatabaseSync, projectId: string, locales: string[])
 
 /** Freezes the live languages' texts as they are: the API delivers them until the next publish. */
 export function publish(db: DatabaseSync, projectId: string, locales: string[], now = Date.now()) {
-  db.prepare(
-    `UPDATE translation_projects SET published = ?, version = version + 1, published_at = ?
-    WHERE project_id = ?`,
-  ).run(JSON.stringify(snapshot(db, projectId, locales)), now, projectId)
+  release(db, projectId, snapshot(db, projectId, locales), now)
+}
+
+/** Publishes an earlier version's texts again, as the next version, so the history only grows.
+ *  False when there is no such version. */
+export function republish(db: DatabaseSync, projectId: string, version: number, now = Date.now()) {
+  const row = db
+    .prepare('SELECT texts FROM translation_versions WHERE project_id = ? AND version = ?')
+    .get(projectId, version) as { texts: string } | undefined
+  if (!row) return false
+  release(db, projectId, JSON.parse(row.texts), now)
+  return true
+}
+
+// shortcut: every version is kept whole; prune old ones if a project's history grows large.
+function release(db: DatabaseSync, projectId: string, texts: Snapshot, now: number) {
+  transaction(db, () => {
+    const json = JSON.stringify(texts)
+    db.prepare(
+      `UPDATE translation_projects SET published = ?, version = version + 1, published_at = ?
+      WHERE project_id = ?`,
+    ).run(json, now, projectId)
+    db.prepare(
+      `INSERT INTO translation_versions (project_id, version, texts, locales, published_at)
+      SELECT project_id, version, ?, ?, ? FROM translation_projects WHERE project_id = ?`,
+    ).run(json, JSON.stringify(Object.keys(texts)), now, projectId)
+  })
+}
+
+/** What sites read first: the current version and its languages. Small, without the texts, so
+ *  checking for a new version stays cheap. Null before the project has translations. */
+export function getManifest(db: DatabaseSync, projectId: string) {
+  const row = db
+    .prepare(
+      `SELECT p.version, p.source, p.published_at, v.locales FROM translation_projects p
+      LEFT JOIN translation_versions v ON v.project_id = p.project_id AND v.version = p.version
+      WHERE p.project_id = ?`,
+    )
+    .get(projectId) as
+    | { version: number; source: string; published_at: number | null; locales: string | null }
+    | undefined
+  if (!row) return null
+  return {
+    source: row.source,
+    locales: row.locales ? (JSON.parse(row.locales) as string[]) : [],
+    version: row.version,
+    publishedAt: row.published_at,
+  }
+}
+
+/** One version's texts in one language, or null when the version or the language is not there. */
+export function getVersionTexts(
+  db: DatabaseSync,
+  projectId: string,
+  version: number,
+  locale: string,
+): Record<string, string> | null {
+  const row = db
+    .prepare(
+      `SELECT json_extract(texts, '$."' || ? || '"') AS texts FROM translation_versions
+      WHERE project_id = ? AND version = ?`,
+    )
+    .get(locale, projectId, version) as { texts: string | null } | undefined
+  return row?.texts ? JSON.parse(row.texts) : null
+}
+
+/** The published versions, newest first. */
+export function listVersions(db: DatabaseSync, projectId: string) {
+  return db
+    .prepare(
+      `SELECT version, published_at AS publishedAt FROM translation_versions WHERE project_id = ?
+      ORDER BY version DESC`,
+    )
+    .all(projectId) as unknown as { version: number; publishedAt: number }[]
 }
 
 /** Whether the live languages or their texts differ from what was last published; before the
@@ -335,4 +405,22 @@ export function isUnpublished(db: DatabaseSync, projectId: string, space: Space)
   const now = snapshot(db, projectId, space.live)
   if (!space.published) return Object.values(now).some((texts) => Object.keys(texts).length)
   return JSON.stringify(now) !== JSON.stringify(space.published)
+}
+
+/** What changed in the project's translations since `since`: its last publish, if it falls after,
+ *  and how many keys were written since, with the latest time. The news on its overview. */
+export function listTranslationChanges(db: DatabaseSync, projectId: string, since: number) {
+  const space = db
+    .prepare('SELECT version, published_at FROM translation_projects WHERE project_id = ?')
+    .get(projectId) as { version: number; published_at: number | null } | undefined
+  const keys = db
+    .prepare(
+      `SELECT count(*) AS count, max(updated_at) AS at FROM translation_keys
+      WHERE project_id = ? AND updated_at > ?`,
+    )
+    .get(projectId, since) as { count: number; at: number | null }
+  return {
+    published: space?.published_at && space.published_at > since ? space : null,
+    keys,
+  }
 }

@@ -1,6 +1,7 @@
 import { nexitasDatabase } from '#nexitas/server/utils/nexitas'
 import type { TranslationSpace } from '../../../../../shared/contracts'
-import { isUnpublished, listKeys } from '../../../../core/translations'
+import { isUnpublished, listKeys, listVersions } from '../../../../core/translations'
+import { listConsumers, listUsage } from '../../../../core/usage'
 import { translationSpace } from '../../../../utils/linguitas'
 
 /** The project's languages, every key with its texts, and how they stand against the publish. */
@@ -17,5 +18,8 @@ export default defineEventHandler((event): TranslationSpace => {
     version: space.version,
     publishedAt: space.publishedAt,
     unpublished: isUnpublished(db, project.id, space),
+    versions: listVersions(db, project.id),
+    consumers: listConsumers(db, project.id),
+    usage: listUsage(db, project.id),
   }
 })

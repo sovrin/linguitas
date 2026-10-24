@@ -8,6 +8,7 @@ export default defineAppConfig({
         label: 'Translations',
         description: 'Texts per language, checked and published to your sites as JSON.',
         icon: 'globe',
+        accent: 'green',
         panel: 'LinguitasProject',
       },
     ],

@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import type { DatabaseSync } from 'node:sqlite'
 import { afterEach, describe, expect, it } from 'vitest'
 import { openDatabase } from '#nexitas/server/core/database'
+import { keyTree, keysUnder } from '../../app/lib/translations'
 import { createProject, deleteProject } from '#nexitas/server/core/projects'
 import {
   audit,
@@ -194,5 +195,34 @@ describe('translations', () => {
     deleteProject(db, 'sonotas', [linguitas])
     expect(getSpace(db, 'sonotas')).toBeNull()
     expect(db.prepare('SELECT COUNT(*) AS n FROM translation_texts').get()).toEqual({ n: 0 })
+  })
+})
+
+describe('key tree', () => {
+  const key = (name: string) => ({ key: name, note: '', texts: {}, updatedAt: 0 })
+
+  it('nests at the dots, keeping a key that also has keys below it', () => {
+    const tree = keyTree([key('general.foo'), key('general.foo.bar'), key('general.baz')])
+    expect(tree.map((node) => node.label)).toEqual(['general'])
+    const general = tree[0]!
+    expect(general.key).toBeUndefined()
+    // A branch before a key, as folders before files.
+    expect(general.children.map((node) => node.label)).toEqual(['foo', 'baz'])
+    const foo = general.children[0]!
+    expect(foo.key?.key).toBe('general.foo')
+    expect(foo.children.map((node) => node.path)).toEqual(['general.foo.bar'])
+    expect(keysUnder(general).map((k) => k.key)).toEqual([
+      'general.foo',
+      'general.foo.bar',
+      'general.baz',
+    ])
+  })
+
+  it('folds a chain that holds nothing else into one row, after the branches', () => {
+    const tree = keyTree([key('checkout.form.errors.email'), key('nav.home'), key('nav.episodes')])
+    expect(tree.map((node) => [node.label, node.path])).toEqual([
+      ['nav', 'nav'],
+      ['checkout.form.errors.email', 'checkout.form.errors.email'],
+    ])
   })
 })

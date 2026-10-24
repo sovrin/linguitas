@@ -1,0 +1,26 @@
+/** Every key, with the values its placeholders need. `keys.d.ts` beside this file fills it in;
+ *  without it, any key is taken. */
+export interface Keys {}
+
+export type Value = string | number
+
+type Key = [keyof Keys] extends [never] ? string : keyof Keys & string
+type Params<K> = K extends keyof Keys
+  ? [keyof Keys[K]] extends [never]
+    ? []
+    : [params: Keys[K]]
+  : [params?: Record<string, Value>]
+
+/** What a build fetched: the version, its source language and texts by language and key. */
+export interface Texts {
+  version: number
+  source: string
+  texts: Record<string, Record<string, string>>
+}
+
+export function start(texts: Texts, options?: { locale?: string }): void
+export function t<K extends Key>(key: K, ...params: Params<K>): string
+export function getLocale(): string
+export function setLocale(locale: string): Promise<void>
+export function subscribe(listener: () => void): () => void
+export function watch(options: { url: string; interval?: number }): () => void

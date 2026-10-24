@@ -1,0 +1,69 @@
+/* What only linguitas draws on top of the nexitas shell (nexitas.css): the key tree and its strip of
+   languages. Unlayered,
+   so it wins over aequitas' layers; tokens only. */
+
+/* One step in per level, and a hairline per ancestor, centred on that level's fold button, so
+   the depth of a key deep in the tree can be followed by eye. The lines repeat down the whole
+   cell, so they run unbroken from row to row. */
+.key-cell {
+  --step: var(--ae-space-5);
+  padding-inline-start: calc(var(--depth, 0) * var(--step) + var(--ae-space-3));
+  background-image: repeating-linear-gradient(
+    to right,
+    var(--ae-border) 0 1px,
+    transparent 1px var(--step)
+  );
+  background-size: calc(var(--depth, 0) * var(--step)) 100%;
+  background-position: calc(var(--ae-space-3) + var(--ae-control-size-s) / 2) 0;
+  background-repeat: repeat-y;
+}
+
+/* A branch's whole name folds it: chevron and name are one button, flush with the keys, and in
+   ink like them (a ghost button's accent would make the folders louder than what they hold). */
+.key-toggle {
+  gap: var(--ae-space-1);
+  padding-inline: 0 var(--ae-space-2);
+  color: var(--ae-text);
+}
+
+/* A key without children keeps the place a chevron takes, so names at one depth line up. */
+.key-spacer {
+  flex: none;
+  inline-size: var(--ae-space-5);
+}
+
+/* The languages of a key as one strip: a fixed cell per language, the codes in the header over
+   the same grid, so twenty languages take the width of a short sentence. */
+.lang-strip {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 3ch;
+  align-items: center;
+  justify-items: start;
+}
+
+/* One language's state, by shape as well as colour: filled is translated, half (in the warning
+   tone) is to check, an empty outline is missing. */
+.lang-state {
+  inline-size: var(--ae-space-3);
+  block-size: var(--ae-space-3);
+  box-shadow: inset 0 0 0 1px var(--ae-border-strong);
+
+  &[data-state='done'] {
+    background: var(--ae-text-muted);
+    box-shadow: none;
+  }
+
+  &[data-state='check'] {
+    background: linear-gradient(135deg, var(--ae-warning) 50%, transparent 50%);
+    box-shadow: inset 0 0 0 1px var(--ae-warning);
+  }
+}
+
+/* On a phone the keys and their languages take the width; a key's source text is in its
+   inspector, a tap away. */
+@media (width < 40rem) {
+  .source-col {
+    display: none;
+  }
+}

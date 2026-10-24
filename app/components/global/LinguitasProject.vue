@@ -37,7 +37,7 @@ async function start() {
     failed="Could not start its translations."
     :start="start"
   >
-    No translations yet. Start, and you get keys to write texts for in each language, and a token to
-    read what you publish.
+    No translations yet. Start, and you get keys to write texts for in each language, and a build
+    token for the sites that use them.
   </PanelStart>
 </template>
