@@ -7,8 +7,8 @@ import { requestProject } from '#nexitas/server/utils/projects'
 import { isKey } from '../../shared/contracts'
 import { getKey, getSpace, type Space } from '../core/translations'
 
-/** The request's project with its translations, or a 404: the panel and the translations page read
- *  that as not started yet. */
+/** The request's project with its translations, or a 404: the Translations page reads that as not
+ *  started yet. */
 export function translationSpace(event: H3Event) {
   const project = requestProject(event)
   const space = getSpace(nexitasDatabase(), project.id)

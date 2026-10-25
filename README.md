@@ -10,8 +10,8 @@ linguitas adds:
 - **translations per project**: its languages (the source first), its keys with a text in each, what
   was published (every version), and a build token for the sites' builds;
 - the admin pages under Translations: every key in every language with what the audit finds, a
-  key's texts, the languages, an import and publishing;
-- a Translations panel on each project's page: start them, see what is left to check;
+  key's texts, the languages, an import and publishing; translations start there, and its Setup
+  holds the snippets, assistant access and the build token;
 - the delivery API, read by sites, apps and build steps.
 
 ## How it fits together
@@ -133,7 +133,7 @@ beyond that is a `409` until one is forgotten under Sites.
 
 An assistant such as Claude Code can write and translate a project's texts over the
 [Model Context Protocol](https://modelcontextprotocol.io). It is off until the owner turns it on
-in the project's Translations panel, which gives a token of its own (`ltm_…`): the build token sits
+under Setup on the Translations page, which gives a token of its own (`ltm_…`): the build token sits
 in CI and never writes. Turning it off, or on again, makes the old token stop working at once.
 
 ```sh

@@ -110,7 +110,7 @@ export const linguitas: NexitasModule = {
   maxBody: 1024 * 1024,
   projectStatus: (db, projectId) => {
     const space = getSpace(db, projectId)
-    if (!space) return []
+    if (!space) return [{ text: 'Not set up', to: `/p/${projectId}/translations` }]
     const keys = listKeys(db, projectId)
     const problems = countProblems(keys, space.live)
     // Keys a site's code uses that do not exist: its build fails until they do.

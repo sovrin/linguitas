@@ -13,8 +13,8 @@ import type { Filter, State, TreeRow } from '../../shared/tree'
  *  A project's translations as one tree of keys at their dots, any depth: each key with its source
  *  text and a strip of squares, one per language, for what is translated, what to check and what
  *  is missing, so any number of languages fits one column. The key in hand (`selected`) opens in
- *  the inspector the page puts in `aside` (and `danger`); without one, the inspector shows how
- *  sites get the texts and which keys their code uses. `aside-name` names the key in hand in the
+ *  the inspector the page puts in `aside` (and `danger`); without one, the inspector shows
+ *  publishing, its history and the sites, or the setup (?setup) once opened. `aside-name` names the key in hand in the
  *  inspector's header. */
 const props = defineProps<{ selected?: string; asideName?: string }>()
 const slots = useSlots()
@@ -180,7 +180,7 @@ async function forget(consumer: string, index: number) {
 const mcpSnippet = computed(() =>
   [
     `claude mcp add --transport http linguitas \\`,
-    `  ${useRequestURL().origin}/v1/translations/${project}/mcp \\`,
+    `  ${origin}/v1/translations/${project}/mcp \\`,
     `  --header "Authorization: Bearer ${space.value?.mcpToken ?? ''}"`,
   ].join('\n'),
 )
@@ -190,6 +190,29 @@ const setAccess = (on: boolean) =>
     await $fetch(`${base}/mcp`, { method: 'POST', body: { on } })
     await refresh()
   })
+
+// Setup (?setup): how a site's build syncs the texts and how its code reads them, and assistants.
+const setup = useSetup()
+const origin = useRequestURL().origin
+const buildSnippet = computed(() =>
+  [
+    `curl -o scripts/linguitas.mjs ${origin}/v1/translations/sync.mjs`,
+    `LINGUITAS_URL=${origin} LINGUITAS_PROJECT=${project} \\`,
+    `LINGUITAS_TOKEN=${space.value?.token ?? ''} node scripts/linguitas.mjs --consumer web`,
+  ].join('\n'),
+)
+const siteSnippet = [
+  `import texts from './linguitas/texts.json'`,
+  `import { start, t, watch } from './linguitas/client'`,
+  ``,
+  `start(texts, { locale: 'de' })`,
+  `watch({ url: '${origin}/v1/translations/${project}' })`,
+  `t('checkout.pay')`,
+].join('\n')
+async function startTranslations() {
+  await $fetch(base, { method: 'POST', body: {} })
+  await Promise.all([refresh(), refreshTree()])
+}
 
 const rotating = ref(false)
 const rotateError = ref('')
@@ -210,10 +233,14 @@ async function rotate() {
 <template>
   <AppPage
     title="Translations"
-    :aside-title="slots.aside ? 'Key' : 'Delivery'"
+    :aside-title="slots.aside ? 'Key' : setup.open.value ? 'Setup' : 'Delivery'"
     :aside-name="asideName"
     :aside-close="
-      slots.aside ? { path: `/p/${project}/translations`, query: route.query } : undefined
+      slots.aside
+        ? { path: `/p/${project}/translations`, query: route.query }
+        : setup.open.value
+          ? setup.close.value
+          : undefined
     "
     aside-mono
     failed="Could not load this project's translations."
@@ -221,6 +248,7 @@ async function rotate() {
     :retry="refresh"
   >
     <template v-if="space" #actions>
+      <SetupLink />
       <NuxtLink :to="`/p/${project}/translations/_languages`" class="btn" data-size="s"
         >Languages</NuxtLink
       >
@@ -272,10 +300,15 @@ async function rotate() {
         @search="search"
       />
     </template>
-    <EmptyState v-if="notStarted">
-      This project has no translations yet. Start them on
-      <NuxtLink :to="`/p/${project}`" class="link">the project's page</NuxtLink>.
-    </EmptyState>
+    <ModuleStart
+      v-if="notStarted"
+      label="Start translations"
+      failed="Could not start its translations."
+      :start="startTranslations"
+    >
+      No translations yet. Start, and you get keys to write texts for in each language, and a build
+      token for the sites that use them.
+    </ModuleStart>
     <!-- What a site's code asks for in vain: its build fails until each one is made. -->
     <AppSection v-if="asked.length" title="Missing keys">
       <DataTable>
@@ -424,6 +457,61 @@ async function rotate() {
 
     <template v-if="space" #aside>
       <slot v-if="slots.aside" name="aside" />
+      <template v-else-if="setup.open.value">
+        <AppSection title="Build">
+          <p class="text-s text-muted">
+            A site's build runs sync first; the build token is for CI, never for a page.
+          </p>
+          <EmbedCode :code="buildSnippet" />
+        </AppSection>
+        <AppSection title="Site">
+          <p class="text-s text-muted">
+            The site starts with what sync fetched and reads newer published texts as it runs.
+          </p>
+          <EmbedCode :code="siteSnippet" />
+        </AppSection>
+        <AppSection title="Assistants">
+          <template v-if="space.mcpToken">
+            <p class="text-s text-muted">
+              An assistant writes and translates the texts over MCP with this token; publishing
+              stays here.
+            </p>
+            <EmbedCode :code="mcpSnippet" />
+            <p>
+              <button
+                type="button"
+                class="link text-muted text-s"
+                :disabled="switching"
+                :aria-busy="switching || undefined"
+                @click="setAccess(false)"
+              >
+                Turn off assistant access
+              </button>
+            </p>
+          </template>
+          <template v-else>
+            <p class="text-s text-muted">
+              Claude Code or another MCP client can write and translate the texts, with a token of
+              its own.
+            </p>
+            <p>
+              <button
+                type="button"
+                class="btn"
+                data-size="s"
+                :disabled="switching"
+                :aria-busy="switching || undefined"
+                @click="setAccess(true)"
+              >
+                Let an assistant edit the texts
+              </button>
+            </p>
+          </template>
+          <AppAlert v-if="switchError" title="Could not change assistant access.">{{
+            switchError
+          }}</AppAlert>
+        </AppSection>
+      </template>
       <template v-else>
         <!-- The button beside what it changes; what sites get now is the History's. -->
         <AppSection v-if="space.unpublished || !space.publishedAt" title="Publish">
@@ -535,52 +623,10 @@ async function rotate() {
             forgetError
           }}</AppAlert>
         </AppSection>
-
-        <AppSection title="Assistants">
-          <template v-if="space.mcpToken">
-            <p class="text-s text-muted">
-              An assistant writes and translates the texts over MCP with this token; publishing
-              stays here.
-            </p>
-            <EmbedCode :code="mcpSnippet" />
-            <p>
-              <button
-                type="button"
-                class="link text-muted text-s"
-                :disabled="switching"
-                :aria-busy="switching || undefined"
-                @click="setAccess(false)"
-              >
-                Turn off assistant access
-              </button>
-            </p>
-          </template>
-          <template v-else>
-            <p class="text-s text-muted">
-              Claude Code or another MCP client can write and translate the texts, with a token of
-              its own.
-            </p>
-            <p>
-              <button
-                type="button"
-                class="btn"
-                data-size="s"
-                :disabled="switching"
-                :aria-busy="switching || undefined"
-                @click="setAccess(true)"
-              >
-                Let an assistant edit the texts
-              </button>
-            </p>
-          </template>
-          <AppAlert v-if="switchError" title="Could not change assistant access.">{{
-            switchError
-          }}</AppAlert>
-        </AppSection>
       </template>
     </template>
     <template v-if="space && slots.danger" #danger><slot name="danger" /></template>
-    <template v-else-if="space" #danger>
+    <template v-else-if="space && setup.open.value" #danger>
       <span>Replaces the build token; builds that sync with the old one fail.</span>
       <DangerAction
         label="Replace the build token"
