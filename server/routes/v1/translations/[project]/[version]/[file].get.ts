@@ -2,12 +2,12 @@ import type { DatabaseSync } from 'node:sqlite'
 import { nexitasDatabase } from '#nexitas/server/utils/nexitas'
 import { LOCALE } from '../../../../../../shared/contracts'
 import { keysDeclaration } from '../../../../../core/declarations'
-import { getVersionTexts, snapshot } from '../../../../../core/translations'
-import { answerCached, requireTranslationToken } from '../../../../../utils/linguitas'
+import { getVersionTexts } from '../../../../../core/translations'
+import { answerCached } from '../../../../../utils/linguitas'
 
 /** A version's files: `<locale>.json`, its texts in that language, and `keys.d.ts`, its keys
- *  typed for a site's `t()`. A version never changes, so they are cached for good. `draft` is the
- *  keys as they are now, for a developer's build, with the build token. */
+ *  typed for a site's `t()`. A version never changes, so they are cached for good. The draft's
+ *  are in draft/. */
 export default defineEventHandler((event) => {
   const db = nexitasDatabase()
   const id = getRouterParam(event, 'project') ?? ''
@@ -16,13 +16,6 @@ export default defineEventHandler((event) => {
   const notFound = () =>
     createError({ statusCode: 404, statusMessage: 'This version has no such file.' })
 
-  if (version === 'draft') {
-    const { space } = requireTranslationToken(event)
-    if (file !== 'keys.d.ts') throw notFound()
-    setHeader(event, 'Content-Type', 'text/plain; charset=utf-8')
-    const source = snapshot(db, id, [space.source])[space.source]!
-    return keysDeclaration(source, 'the draft')
-  }
   const number = /^[1-9]\d{0,8}$/.test(version) ? Number(version) : 0
   if (!number) throw notFound()
   if (file === 'keys.d.ts') {

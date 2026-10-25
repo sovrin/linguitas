@@ -10,8 +10,11 @@
 //    --out, to be committed: when linguitas cannot be reached, the build goes on with those.
 // 3. Fails on a key that is not a literal, one that does not exist, and (without --draft) one
 //    that exists only as a draft: a site never ships asking for a text nobody published.
-// 4. In CI, reports the keys it found, so linguitas knows what no code uses and what code asks
-//    for in vain.
+// 4. In CI, with the token, reports the keys it found, so linguitas knows what no code uses and
+//    what code asks for in vain.
+//
+// Without LINGUITAS_URL (a fork, a self-hosted build) it fetches nothing and checks the code
+// against the committed texts: a site builds without linguitas.
 //
 // It parses with the Vue compiler and the Babel parser the site already has; nothing is installed.
 import { existsSync } from 'node:fs'
@@ -233,6 +236,8 @@ async function request(url, token, init = {}) {
     signal: AbortSignal.timeout(15_000),
   })
   if (!response.ok) throw new Error(`${url}: ${response.status} ${response.statusText}`)
+  // A redirect means the address answered with something else, such as a sign-in page.
+  if (response.redirected) throw new Error(`${url}: redirected to ${response.url}`)
   return response
 }
 
@@ -270,6 +275,19 @@ async function fetchAll(served, api, token, draft) {
 
 // ── The command
 
+/** What sync does with what it was given: fetch when linguitas is named, else check against the
+ *  committed texts; report in CI when it has the token and a consumer. */
+export function mode({ url, project, token, consumer, draft }, ci) {
+  const online = !!(url && project)
+  if (draft && ci) return { error: '--draft is for development: CI builds what was published.' }
+  if (draft && !(online && token))
+    return {
+      error:
+        '--draft needs linguitas and the build token: LINGUITAS_URL, LINGUITAS_PROJECT and LINGUITAS_TOKEN.',
+    }
+  return { online, report: ci && online && !!token && !!consumer }
+}
+
 async function main() {
   const { values } = parseArgs({
     options: {
@@ -284,18 +302,15 @@ async function main() {
     },
   })
   const ci = !!process.env.CI
-  if (!values.url || !values.project)
-    return fail(['Name linguitas and the project: LINGUITAS_URL and LINGUITAS_PROJECT.'])
-  if (values.draft && ci) return fail(['--draft is for development: CI builds what was published.'])
-  if (values.draft && !values.token)
-    return fail(['--draft needs the build token: LINGUITAS_TOKEN.'])
-  if (ci && (!values.token || !values.consumer))
-    return fail(['In CI, sync reports what it found: set LINGUITAS_TOKEN and --consumer.'])
+  const { error, online, report } = mode(values, ci)
+  if (error) return fail([error])
+  if (ci && online && !report)
+    console.warn('linguitas: not reporting the keys in use: set LINGUITAS_TOKEN and --consumer.')
 
   const root = process.cwd()
   const out = resolve(values.out)
   // Where linguitas serves its files, and the project's translations.
-  const served = `${values.url.replace(/\/+$/, '')}/v1/translations`
+  const served = `${values.url?.replace(/\/+$/, '')}/v1/translations`
   const api = `${served}/${values.project}`
 
   // 1. Scan.
@@ -316,6 +331,7 @@ async function main() {
   let texts
   let version
   try {
+    if (!online) throw new Error('no LINGUITAS_URL and LINGUITAS_PROJECT')
     const fetched = await fetchAll(served, api, values.token, values.draft)
     await mkdir(out, { recursive: true })
     await writeFile(join(out, 'texts.json'), `${JSON.stringify(fetched.texts, null, 2)}\n`)
@@ -332,9 +348,8 @@ async function main() {
       `linguitas: ${values.draft ? 'the draft' : `version ${version}`}, ${Object.keys(texts.texts).join(', ') || 'no language'}`,
     )
   } catch (error) {
-    console.warn(
-      `linguitas: could not fetch (${error.message}); going on with ${relative(root, out)}.`,
-    )
+    const why = online ? `could not fetch (${error.message})` : error.message
+    console.warn(`linguitas: ${why}; checking against ${relative(root, out)}.`)
     try {
       texts = JSON.parse(await readFile(join(out, 'texts.json'), 'utf8'))
       version = texts.version
@@ -347,7 +362,7 @@ async function main() {
   // 3. Check: a key exists when the source language has a text for it.
   const known = new Set(Object.keys(texts.texts[texts.source] ?? {}))
   let drafted
-  if (!values.draft && values.token && uses.some((u) => !known.has(u.key)))
+  if (online && !values.draft && values.token && uses.some((u) => !known.has(u.key)))
     drafted = await request(`${api}/draft`, values.token)
       .then(async (r) => {
         const draft = await r.json()
@@ -357,7 +372,7 @@ async function main() {
   const problems = check(uses, violations, known, drafted)
 
   // 4. Report, in CI only: a branch on a laptop never rewrites what a site uses.
-  if (ci) {
+  if (report) {
     const keys = [...new Set(uses.map((u) => u.key))].sort()
     try {
       await request(`${api}/report`, values.token, {

@@ -1,6 +1,6 @@
 import { nexitasDatabase } from '#nexitas/server/utils/nexitas'
-import { snapshot } from '../../../../core/translations'
-import { requireTranslationToken } from '../../../../utils/linguitas'
+import { snapshot } from '../../../../../core/translations'
+import { requireTranslationToken } from '../../../../../utils/linguitas'
 
 /** The texts as they are now, published or not, in every language worked in: what a developer's
  *  build reads with `--draft`. Never what a site in production gets. */

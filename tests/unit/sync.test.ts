@@ -3,7 +3,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { SYNC_VERSION } from '../../shared/contracts'
 // The served files are plain JavaScript; the tests run them as sites do.
 import * as client from '../../public/v1/translations/client.js'
-import { check, loadParsers, scanSource, VERSION } from '../../public/v1/translations/sync.mjs'
+import {
+  check,
+  loadParsers,
+  mode,
+  scanSource,
+  VERSION,
+} from '../../public/v1/translations/sync.mjs'
 
 const parsers = await loadParsers(resolve(import.meta.dirname, '../..'))
 
@@ -108,5 +114,23 @@ describe('client', () => {
     await changed
     stop()
     expect(client.t('hi')).toBe('Servus')
+  })
+
+  it('builds without linguitas, and reports only with the token', () => {
+    const named = { url: 'https://nexitas.example', project: 'sonotas' }
+    expect(mode({}, false)).toEqual({ online: false, report: false })
+    expect(mode({}, true)).toEqual({ online: false, report: false })
+    expect(mode(named, true)).toEqual({ online: true, report: false })
+    expect(mode({ ...named, token: 'lt_x', consumer: 'web' }, true)).toEqual({
+      online: true,
+      report: true,
+    })
+    expect(mode({ ...named, token: 'lt_x', consumer: 'web' }, false).report).toBe(false)
+    expect(mode({ ...named, token: 'lt_x', draft: true }, false)).toEqual({
+      online: true,
+      report: false,
+    })
+    expect(mode({ draft: true }, false).error).toMatch(/LINGUITAS_URL/)
+    expect(mode({ ...named, token: 'lt_x', draft: true }, true).error).toMatch(/development/)
   })
 })
