@@ -28,6 +28,7 @@ export default defineEventHandler((event): TranslationSpace => {
   ) as Record<Check, number>
   return {
     token: space.token,
+    mcpToken: space.mcpToken,
     source: space.source,
     locales: space.locales,
     live: space.live,

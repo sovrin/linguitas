@@ -10,6 +10,7 @@ import type { KeyInput, Snapshot, Text, TextKey } from '../../shared/contracts'
 
 interface SpaceRow {
   token: string
+  mcp_token: string | null
   source: string
   published: string | null
   version: number
@@ -18,6 +19,8 @@ interface SpaceRow {
 
 export interface Space {
   token: string
+  /** What an assistant edits the project's texts with, over MCP; null while that is off. */
+  mcpToken: string | null
   source: string
   /** Every language the owner works in, the source first, then in the order they were added. */
   locales: string[]
@@ -31,7 +34,7 @@ export interface Space {
 export function getSpace(db: DatabaseSync, projectId: string): Space | null {
   const row = db
     .prepare(
-      `SELECT token, source, published, version, published_at FROM translation_projects
+      `SELECT token, mcp_token, source, published, version, published_at FROM translation_projects
       WHERE project_id = ?`,
     )
     .get(projectId) as SpaceRow | undefined
@@ -44,6 +47,7 @@ export function getSpace(db: DatabaseSync, projectId: string): Space | null {
     .all(projectId, row.source) as unknown as { locale: string; live: number }[]
   return {
     token: row.token,
+    mcpToken: row.mcp_token,
     source: row.source,
     locales: locales.map((locale) => locale.locale),
     live: locales.filter((locale) => locale.live).map((locale) => locale.locale),
@@ -77,6 +81,15 @@ export function createSpace(db: DatabaseSync, projectId: string, now = Date.now(
 export function rotateToken(db: DatabaseSync, projectId: string) {
   db.prepare('UPDATE translation_projects SET token = ? WHERE project_id = ?').run(
     newToken('lt_'),
+    projectId,
+  )
+}
+
+/** Turns assistants' access over MCP on with a new token, or off; the old token stops working at
+ *  once either way. */
+export function setMcpAccess(db: DatabaseSync, projectId: string, on: boolean) {
+  db.prepare('UPDATE translation_projects SET mcp_token = ? WHERE project_id = ?').run(
+    on ? newToken('ltm_') : null,
     projectId,
   )
 }

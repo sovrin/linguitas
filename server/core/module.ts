@@ -67,8 +67,22 @@ export const linguitas: NexitasModule = {
       FOREIGN KEY (project_id, consumer)
         REFERENCES translation_consumers(project_id, consumer) ON DELETE CASCADE
     ) WITHOUT ROWID;`,
+    // An assistant may edit the texts over MCP once the owner gives it a token of its own: the
+    // build token sits in CI, and must never write.
+    `ALTER TABLE translation_projects ADD COLUMN mcp_token TEXT;`,
   ],
   publicRoutes: [
+    // An assistant's MCP client (Claude Code, an editor), never a page: it sends no Origin, and
+    // one that does is a browser that was led here. First, before the read route's /<locale>.
+    {
+      path: /^\/v1\/translations\/([a-z0-9-]+)\/mcp$/,
+      json: true,
+      maxBody: 1024 * 1024,
+      guard: (event) => {
+        if (getHeader(event, 'origin'))
+          throw createError({ statusCode: 403, statusMessage: 'MCP is not for pages.' })
+      },
+    },
     // A site's build reports the keys it uses, with the build token. Servers send no Origin; a
     // page may only from the project's own origins, and needs the token all the same.
     {

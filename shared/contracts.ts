@@ -21,6 +21,8 @@ export const localeSchema = z.string().regex(LOCALE, 'Use a language tag, such a
 
 /** A language to add, or to make the source. */
 export const localeInputSchema = z.object({ locale: localeSchema }).strict()
+/** Whether assistants may edit the texts over MCP: on gives a new token, off drops it. */
+export const mcpAccessSchema = z.object({ on: z.boolean() }).strict()
 /** Whether the next publish delivers a language. */
 export const liveSchema = z.object({ live: z.boolean() }).strict()
 
@@ -157,6 +159,8 @@ export type Snapshot = Record<string, Record<string, string>>
 /** A project's translations, as its admin page shows them. */
 export interface TranslationSpace {
   token: string
+  /** What an assistant edits the texts with over MCP; null while that is off. */
+  mcpToken: string | null
   source: string
   /** Every language worked in, the source first. */
   locales: string[]

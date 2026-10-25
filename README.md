@@ -129,6 +129,37 @@ The build token, sent as `Authorization: Bearer`, is for builds only:
 A project takes 60 reports an hour (then `429`) and keeps 50 consumers: a report from a new one
 beyond that is a `409` until one is forgotten under Sites.
 
+## Assistants (MCP)
+
+An assistant such as Claude Code can write and translate a project's texts over the
+[Model Context Protocol](https://modelcontextprotocol.io). It is off until the owner turns it on
+in the project's Translations panel, which gives a token of its own (`ltm_…`): the build token sits
+in CI and never writes. Turning it off, or on again, makes the old token stop working at once.
+
+```sh
+claude mcp add --transport http linguitas https://nexitas.example.com/v1/translations/<project>/mcp \
+  --header "Authorization: Bearer <MCP token>"
+```
+
+| Tool           | Does                                                                                 |
+| -------------- | ------------------------------------------------------------------------------------ |
+| `list_keys`    | The languages, and every key with its note and source text; with `locale`, its audit |
+| `get_key`      | One key in every language                                                            |
+| `save_keys`    | Create keys or change their note and texts, up to 200 at a time; returns the audit   |
+| `translate`    | What translating keys into a language takes: source, note, placeholders, a glossary  |
+| `add_language` | Add a draft language                                                                 |
+
+**The assistant translates, not linguitas.** `translate` gives it each key's source text, its
+note (where the text appears, so it decides the wording and the length), the placeholders to keep,
+the current translation and the source it was written for, and up to 40 of the project's settled
+translations to stay consistent with. Without `keys`, it picks what is missing, stale or has wrong
+placeholders. The assistant then saves what it wrote with `save_keys`, which answers with what the
+audit still finds. No text leaves nexitas for an AI service of nexitas' own, and nothing reaches a
+site until the owner publishes.
+
+The endpoint answers every call at once (Streamable HTTP without sessions or a stream), only with
+the token, and never to a page: a request with an `Origin` is refused.
+
 ## Admin API
 
 The admin pages use it, under the owner's session; writes come from nexitas' own origin, like every
@@ -142,6 +173,7 @@ The admin pages use it, under the owner's session; writes come from nexitas' own
 | `POST …/:locale/source` · `…/delete`      | Make a live one the source · remove a draft                    |
 | `POST /import`                            | One language file `{ locale, strings }`, flat or nested        |
 | `POST /publish` · `POST /token`           | Publish the texts as they are · replace the build token        |
+| `POST /mcp`                               | Assistant access `{ on }`: a new MCP token, or none            |
 | `POST /versions/:version/publish`         | Publish an earlier version again, as the next one              |
 | `POST /consumers/:consumer/delete`        | Forget a site, so its keys stop counting as used               |
 | `POST /keys`                              | Add one `{ key, note, texts: { [locale]: text } }`             |

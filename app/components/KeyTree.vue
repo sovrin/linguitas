@@ -176,6 +176,21 @@ async function forget(consumer: string, index: number) {
   }
 }
 
+// An assistant edits the texts over MCP with a token of its own, which the owner turns on and off.
+const mcpSnippet = computed(() =>
+  [
+    `claude mcp add --transport http linguitas \\`,
+    `  ${useRequestURL().origin}/v1/translations/${project}/mcp \\`,
+    `  --header "Authorization: Bearer ${space.value?.mcpToken ?? ''}"`,
+  ].join('\n'),
+)
+const { pending: switching, error: switchError, submit } = useSubmit()
+const setAccess = (on: boolean) =>
+  submit(async () => {
+    await $fetch(`${base}/mcp`, { method: 'POST', body: { on } })
+    await refresh()
+  })
+
 const rotating = ref(false)
 const rotateError = ref('')
 async function rotate() {
@@ -518,6 +533,48 @@ async function rotate() {
           </ul>
           <AppAlert v-if="forgetError" title="Could not forget the site.">{{
             forgetError
+          }}</AppAlert>
+        </AppSection>
+
+        <AppSection title="Assistants">
+          <template v-if="space.mcpToken">
+            <p class="text-s text-muted">
+              An assistant writes and translates the texts over MCP with this token; publishing
+              stays here.
+            </p>
+            <EmbedCode :code="mcpSnippet" />
+            <p>
+              <button
+                type="button"
+                class="link text-muted text-s"
+                :disabled="switching"
+                :aria-busy="switching || undefined"
+                @click="setAccess(false)"
+              >
+                Turn off assistant access
+              </button>
+            </p>
+          </template>
+          <template v-else>
+            <p class="text-s text-muted">
+              Claude Code or another MCP client can write and translate the texts, with a token of
+              its own.
+            </p>
+            <p>
+              <button
+                type="button"
+                class="btn"
+                data-size="s"
+                :disabled="switching"
+                :aria-busy="switching || undefined"
+                @click="setAccess(true)"
+              >
+                Let an assistant edit the texts
+              </button>
+            </p>
+          </template>
+          <AppAlert v-if="switchError" title="Could not change assistant access.">{{
+            switchError
           }}</AppAlert>
         </AppSection>
       </template>
