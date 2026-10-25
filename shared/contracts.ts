@@ -38,10 +38,116 @@ export const keyInputSchema = z
 export const newKeySchema = keyInputSchema.extend({ key: keySchema }).strict()
 export type KeyInput = z.infer<typeof keyInputSchema>
 
-/** A file of one language's texts, flat or nested, as i18n libraries keep them. */
-export const importSchema = z
-  .object({ locale: localeSchema, strings: z.record(z.string(), z.unknown()) })
+/** A linguitas file: every key with its note and its texts by language. The export writes it and
+ *  the import reads it back, so a project moves between installs, or to a translator and back,
+ *  whole. Keys are flat. */
+export interface TransferFile {
+  linguitas: 1
+  source: string
+  keys: Record<string, { note?: string; texts: Record<string, string> }>
+}
+
+/** What an import may change: a key's text in one language, or its note (`locale` null). */
+export interface ImportEntry {
+  key: string
+  locale: string | null
+  text: string
+}
+
+/** Files to read for an import: linguitas files, or one language's texts each, flat or nested as
+ *  i18n libraries keep them, in the language `locale` names. */
+export const importFilesSchema = z
+  .object({
+    files: z
+      .array(
+        z
+          .object({
+            name: z.string().max(200),
+            locale: localeSchema.optional(),
+            content: z.record(z.string(), z.unknown()),
+          })
+          .strict(),
+      )
+      .min(1)
+      .max(20),
+  })
   .strict()
+
+/** The entries the owner picked from a preview, to write. */
+export const importApplySchema = z
+  .object({
+    entries: z
+      .array(
+        z
+          .object({
+            key: keySchema,
+            locale: localeSchema.nullable(),
+            text: z.string().max(10_000),
+          })
+          .strict(),
+      )
+      .min(1)
+      .max(20_000),
+  })
+  .strict()
+
+/** One change a preview offers: `key` makes the key, `new` fills what is empty, `changed`
+ *  replaces what is there (`before`). */
+export interface ImportRow extends ImportEntry {
+  change: 'key' | 'new' | 'changed'
+  before: string | null
+  file: string
+}
+
+export interface ImportPreview {
+  rows: ImportRow[]
+  /** How many entries say what the project says already. */
+  same: number
+  /** Languages a file has texts in that the project lacks; their texts are left out. */
+  unknownLocales: string[]
+  /** What could not be read, as `file: key`. */
+  skipped: string[]
+}
+
+/** The entries of one uploaded file. A linguitas file brings its own languages and notes; any
+ *  other is one language's texts, in `locale`. An empty text is skipped: it would remove one. */
+export function readImportFile(content: Record<string, unknown>, locale: string | undefined) {
+  const entries: ImportEntry[] = []
+  const skipped: string[] = []
+  if (content.linguitas === 1 && content.keys && typeof content.keys === 'object') {
+    for (const [key, value] of Object.entries(content.keys as Record<string, unknown>)) {
+      const item = value as { note?: unknown; texts?: unknown } | null
+      if (!isKey(key) || !item || typeof item !== 'object') {
+        skipped.push(key)
+        continue
+      }
+      if (typeof item.note === 'string' && item.note.length <= 500)
+        entries.push({ key, locale: null, text: item.note.trim() })
+      for (const [at, text] of Object.entries((item.texts ?? {}) as Record<string, unknown>)) {
+        if (LOCALE.test(at) && typeof text === 'string' && text && text.length <= 10_000)
+          entries.push({ key, locale: at, text })
+        else skipped.push(`${key} (${at})`)
+      }
+    }
+    return { entries, skipped }
+  }
+  if (!locale) return { entries, skipped: ['the whole file: name its language'] }
+  const flat = flatten(content)
+  for (const [key, text] of Object.entries(flat.strings))
+    if (text) entries.push({ key, locale, text })
+    else skipped.push(key)
+  return { entries, skipped: [...skipped, ...flat.skipped] }
+}
+
+/** The language a plain file's name names: de.json, messages.pt-BR.json. */
+export function localeOfFileName(name: string) {
+  const tag =
+    name
+      .replace(/\.json$/i, '')
+      .split(/[._/\\]/)
+      .pop() ?? ''
+  return LOCALE.test(tag) ? tag : undefined
+}
 
 /** One language's text for a key. */
 export interface Text {

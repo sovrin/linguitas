@@ -12,7 +12,9 @@ import {
   flatten,
   keyInputSchema,
   localeInputSchema,
+  localeOfFileName,
   placeholders,
+  readImportFile,
 } from '../../shared/contracts'
 import {
   addLocale,
@@ -20,9 +22,10 @@ import {
   createSpace,
   getKey,
   getSpace,
-  importTexts,
+  applyImport,
+  exportTexts,
+  previewImport,
   isUnpublished,
-  listKeys,
   publish,
   removeLocale,
   rotateToken,
@@ -113,25 +116,104 @@ describe('translations', () => {
     expect(skipped).toEqual([`deep${'.n'.repeat(20)}`])
   })
 
-  it('imports nested files, adding the keys it lacks', () => {
+  it('reads language files and linguitas files, naming what it leaves out', () => {
+    expect(
+      readImportFile({ checkout: { pay: 'Pay', total: '' }, count: 3, 'bad key': 'x' }, 'en'),
+    ).toEqual({
+      entries: [{ key: 'checkout.pay', locale: 'en', text: 'Pay' }],
+      skipped: ['checkout.total', 'count', 'bad key'],
+    })
+    expect(readImportFile({ pay: 'Pay' }, undefined).entries).toEqual([])
+    expect(
+      readImportFile(
+        {
+          linguitas: 1,
+          source: 'en',
+          keys: {
+            pay: { note: 'Button', texts: { en: 'Pay', de: 'Zahlen', '??': 'x' } },
+            'bad key': {},
+          },
+        },
+        'fr',
+      ),
+    ).toEqual({
+      entries: [
+        { key: 'pay', locale: null, text: 'Button' },
+        { key: 'pay', locale: 'en', text: 'Pay' },
+        { key: 'pay', locale: 'de', text: 'Zahlen' },
+      ],
+      skipped: ['pay (??)', 'bad key'],
+    })
+    expect(localeOfFileName('de.json')).toBe('de')
+    expect(localeOfFileName('messages.pt-BR.json')).toBe('pt-BR')
+    expect(localeOfFileName('texts.json')).toBeUndefined()
+  })
+
+  it('previews an import row by row, then writes only what was picked', () => {
     const db = database()
-    const { strings, skipped } = flatten({
-      checkout: { pay: 'Pay', total: 'Total' },
-      count: 3,
-      'bad key': 'x',
-    })
-    expect(strings).toEqual({ 'checkout.pay': 'Pay', 'checkout.total': 'Total' })
-    expect(skipped).toEqual(['count', 'bad key'])
-    expect(importTexts(db, 'sonotas', locales, 'en', strings)).toEqual({ added: 2, changed: 2 })
-    expect(importTexts(db, 'sonotas', locales, 'de', { 'checkout.pay': 'Bezahlen' })).toEqual({
-      added: 0,
-      changed: 1,
-    })
-    expect(getKey(db, 'sonotas', 'checkout.pay')!.texts.de!.basedOn).toBe('Pay')
-    expect(listKeys(db, 'sonotas').map((key) => key.key)).toEqual([
-      'checkout.pay',
-      'checkout.total',
+    createKey(db, 'sonotas', locales, 'pay', input({ en: 'Pay', de: 'Zahlen' }))
+    const entries = [
+      { key: 'pay', locale: 'en', text: 'Pay' },
+      { key: 'pay', locale: 'de', text: 'Bezahlen' },
+      { key: 'pay', locale: null, text: 'Checkout button' },
+      { key: 'total', locale: 'en', text: 'Total' },
+      { key: 'total', locale: 'fr', text: 'Total' },
+    ]
+    const preview = previewImport(db, 'sonotas', locales, [{ name: 'a.json', entries }])
+    expect(preview.same).toBe(1)
+    expect(preview.unknownLocales).toEqual(['fr'])
+    expect(preview.rows.map((row) => [row.key, row.locale, row.change, row.before])).toEqual([
+      ['pay', 'de', 'changed', 'Zahlen'],
+      ['pay', null, 'new', null],
+      ['total', 'en', 'key', null],
     ])
+    // Fill only: the replacement is left out.
+    expect(
+      applyImport(
+        db,
+        'sonotas',
+        locales,
+        preview.rows.filter((row) => row.change !== 'changed'),
+      ),
+    ).toEqual({
+      added: 1,
+      changed: 2,
+    })
+    expect(getKey(db, 'sonotas', 'pay')!.note).toBe('Checkout button')
+    expect(getKey(db, 'sonotas', 'pay')!.texts.de!.text).toBe('Zahlen')
+    expect(getKey(db, 'sonotas', 'total')!.texts.en!.text).toBe('Total')
+  })
+
+  it('exports what was asked, and the import takes a whole export back as it was', () => {
+    const db = database()
+    createKey(db, 'sonotas', locales, 'help.title', {
+      ...input({ en: 'Help', de: 'Hilfe' }),
+      note: 'Heading',
+    })
+    createKey(db, 'sonotas', locales, 'help.close', input({ en: 'Close' }))
+    createKey(db, 'sonotas', locales, 'pay', input({ en: 'Pay', de: 'Zahlen' }))
+    const space = getSpace(db, 'sonotas')!
+    const whole = exportTexts(db, 'sonotas', space, { locales })
+    expect(whole).toEqual({
+      linguitas: 1,
+      source: 'en',
+      keys: {
+        'help.close': { texts: { en: 'Close' } },
+        'help.title': { note: 'Heading', texts: { en: 'Help', de: 'Hilfe' } },
+        pay: { texts: { en: 'Pay', de: 'Zahlen' } },
+      },
+    })
+    expect(
+      Object.keys(
+        exportTexts(db, 'sonotas', space, { locales: ['en'], prefix: 'help.', needs: 'de' }).keys,
+      ),
+    ).toEqual(['help.close'])
+
+    const other = database()
+    const { entries } = readImportFile(whole as unknown as Record<string, unknown>, undefined)
+    const preview = previewImport(other, 'sonotas', locales, [{ name: 'backup.json', entries }])
+    applyImport(other, 'sonotas', locales, preview.rows)
+    expect(exportTexts(other, 'sonotas', getSpace(other, 'sonotas')!, { locales })).toEqual(whole)
   })
 
   it('delivers what was published until the next publish', () => {

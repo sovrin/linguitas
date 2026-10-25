@@ -255,6 +255,9 @@ async function rotate() {
       <NuxtLink :to="`/p/${project}/translations/_import`" class="btn" data-size="s"
         >Import</NuxtLink
       >
+      <NuxtLink :to="`/p/${project}/translations/_export`" class="btn" data-size="s"
+        >Export</NuxtLink
+      >
       <NuxtLink :to="`/p/${project}/translations/_new`" class="btn" data-size="s">New key</NuxtLink>
     </template>
 

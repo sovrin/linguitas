@@ -4,7 +4,17 @@
 import type { DatabaseSync } from 'node:sqlite'
 import { newToken } from '#nexitas/server/core/auth'
 import { transaction } from '#nexitas/server/core/database'
-import type { KeyInput, Snapshot, Text, TextKey } from '../../shared/contracts'
+import {
+  audit,
+  type ImportEntry,
+  type ImportPreview,
+  type ImportRow,
+  type KeyInput,
+  type Snapshot,
+  type Text,
+  type TextKey,
+  type TransferFile,
+} from '../../shared/contracts'
 
 // ── A project's translations
 
@@ -258,14 +268,51 @@ export function deleteKey(db: DatabaseSync, projectId: string, key: string) {
   db.prepare('DELETE FROM translation_keys WHERE project_id = ? AND key = ?').run(projectId, key)
 }
 
-/** Writes one language file into the project: keys it does not have yet are added. Returns how
- *  many keys were added and how many texts changed. */
-export function importTexts(
+/** What importing `entries` would change, one row each, against the project as it is now. An
+ *  entry that says what is there already only counts; one in a language the project lacks is
+ *  left out, its language named. When a file names the same thing twice, the last one counts. */
+export function previewImport(
   db: DatabaseSync,
   projectId: string,
   locales: string[],
-  locale: string,
-  strings: Record<string, string>,
+  files: { name: string; entries: ImportEntry[] }[],
+): Omit<ImportPreview, 'skipped'> {
+  const keys = new Map(listKeys(db, projectId).map((key) => [key.key, key]))
+  const rows = new Map<string, ImportRow>()
+  const unknown = new Set<string>()
+  let same = 0
+  for (const { name, entries } of files)
+    for (const entry of entries) {
+      if (entry.locale !== null && !locales.includes(entry.locale)) {
+        unknown.add(entry.locale)
+        continue
+      }
+      const key = keys.get(entry.key)
+      const before = !key
+        ? null
+        : entry.locale === null
+          ? key.note || null
+          : (key.texts[entry.locale]?.text ?? null)
+      const id = `${entry.key} ${entry.locale ?? ''}`
+      if (before === entry.text || (entry.locale === null && !before && !entry.text)) {
+        same++
+        rows.delete(id)
+        continue
+      }
+      const change = !key ? 'key' : before === null ? 'new' : 'changed'
+      rows.set(id, { ...entry, before, change, file: name })
+    }
+  return { rows: [...rows.values()], same, unknownLocales: [...unknown].sort() }
+}
+
+/** Writes what the owner picked from a preview, in one go: a key it names that the project lacks
+ *  is made, a note replaces the key's, a text the one in its language. Returns how many keys were
+ *  made and how many notes and texts changed. */
+export function applyImport(
+  db: DatabaseSync,
+  projectId: string,
+  locales: string[],
+  entries: ImportEntry[],
   now = Date.now(),
 ) {
   return transaction(db, () => {
@@ -273,14 +320,55 @@ export function importTexts(
       `INSERT OR IGNORE INTO translation_keys (project_id, key, created_at, updated_at)
       VALUES (?, ?, ?, ?)`,
     )
+    const note = db.prepare(
+      'UPDATE translation_keys SET note = ?, updated_at = ? WHERE project_id = ? AND key = ?',
+    )
+    const byKey = new Map<string, ImportEntry[]>()
+    for (const entry of entries) byKey.set(entry.key, [...(byKey.get(entry.key) ?? []), entry])
     let added = 0
     let changed = 0
-    for (const [key, text] of Object.entries(strings)) {
+    for (const [key, own] of byKey) {
       added += Number(add.run(projectId, key, now, now).changes)
-      changed += writeTexts(db, projectId, locales, key, { [locale]: text }, [], now)
+      const texts: Record<string, string> = {}
+      for (const entry of own)
+        if (entry.locale === null)
+          changed += Number(note.run(entry.text, now, projectId, key).changes)
+        else if (locales.includes(entry.locale)) texts[entry.locale] = entry.text
+      changed += writeTexts(db, projectId, locales, key, texts, [], now)
     }
     return { added, changed }
   })
+}
+
+/** The project's keys as a linguitas file: each key's note and its texts in `locales`. `prefix`
+ *  keeps the keys under it; `needs` the keys with something to fix in that language (missing,
+ *  stale, placeholders), what a translator gets. */
+export function exportTexts(
+  db: DatabaseSync,
+  projectId: string,
+  space: Space,
+  { locales, prefix = '', needs }: { locales: string[]; prefix?: string; needs?: string },
+): TransferFile {
+  const keys = listKeys(db, projectId).filter(
+    (key) =>
+      key.key.startsWith(prefix) &&
+      (!needs || audit(key, needs, space.source).some((check) => check !== 'unchanged')),
+  )
+  return {
+    linguitas: 1,
+    source: space.source,
+    keys: Object.fromEntries(
+      keys.map((key) => [
+        key.key,
+        {
+          ...(key.note ? { note: key.note } : {}),
+          texts: Object.fromEntries(
+            locales.filter((at) => key.texts[at]).map((at) => [at, key.texts[at]!.text]),
+          ),
+        },
+      ]),
+    ),
+  }
 }
 
 /** Stores a key's texts by language and returns how many changed. The source's text is kept as it

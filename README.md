@@ -10,7 +10,7 @@ linguitas adds:
 - **translations per project**: its languages (the source first), its keys with a text in each, what
   was published (every version), and a build token for the sites' builds;
 - the admin pages under Translations: every key in every language with what the audit finds, a
-  key's texts, the languages, an import and publishing; translations start there, and its Setup
+  key's texts, the languages, import and export, and publishing; translations start there, and its Setup
   holds the snippets, assistant access and the build token;
 - the delivery API, read by sites, apps and build steps.
 
@@ -82,10 +82,13 @@ way the build knows every key a site uses.
    - `client.js` and `client.d.ts`.
 
    When linguitas cannot be reached, it warns and the build goes on with the committed files.
+   Without `LINGUITAS_URL` (a fork, a self-hosted build) it fetches nothing and checks the code
+   against them, so a site builds without linguitas.
 
 3. **Fails** on a key that is not a literal, a key that does not exist, and a key that exists only
    as a draft ("publish it"). A site never ships asking for a text nobody published.
-4. **Reports**, in CI only (`CI` set), the keys it found as `--consumer`, with the build token. The
+4. **Reports**, in CI only (`CI` set) and only with the build token and `--consumer`, the keys it
+   found; a CI without them builds and says it did not report. The
    Translations page then shows what no site uses ("Not in code") and what a site asks for that
    does not exist, with "Create key".
 
@@ -129,6 +132,37 @@ The build token, sent as `Authorization: Bearer`, is for builds only:
 A project takes 60 reports an hour (then `429`) and keeps 50 consumers: a report from a new one
 beyond that is a `409` until one is forgotten under Sites.
 
+## Import and export
+
+**Export** writes one JSON file, a _linguitas file_: each key with its note and its texts in the
+languages picked.
+
+```json
+{
+  "linguitas": 1,
+  "source": "en",
+  "keys": {
+    "help.title": {
+      "note": "Dialog heading",
+      "texts": { "en": "How it works", "de": "So funktioniert’s" }
+    }
+  }
+}
+```
+
+Every language and key make a full backup. Some languages, the keys under a prefix (`help.`) or
+only what needs work in one language (missing, stale, other placeholders) make the file to hand a
+translator.
+
+**Import** reads such files back, and any other JSON as one language's texts by key, flat or
+nested, as i18n libraries keep them (its name says which language: `de.json`). Nothing is written
+at once: a preview lists every change (a new key, a text or note where there was none, one that
+replaces what is there, with both side by side) and leaves out what is the same already and
+languages the project lacks. "Fill only what is empty" or "Also replace what differs", and
+whether keys the project lacks are made, decide which rows start picked; each can be changed, and
+only the picked ones are written, together. An export imported into another install brings the
+project's keys, notes and texts as they were.
+
 ## Assistants (MCP)
 
 An assistant such as Claude Code can write and translate a project's texts over the
@@ -165,19 +199,21 @@ the token, and never to a page: a request with an `Origin` is refused.
 The admin pages use it, under the owner's session; writes come from nexitas' own origin, like every
 `/api` route. All paths start with `/api/p/:project/translations`.
 
-| Request                                   | Does                                                           |
-| ----------------------------------------- | -------------------------------------------------------------- |
-| `GET · POST /`                            | Languages, keys and texts, `404` before it starts · start      |
-| `POST /languages`                         | Add a draft language `{ locale }`                              |
-| `POST /languages/:locale`                 | Put it live or take it offline `{ live }`                      |
-| `POST …/:locale/source` · `…/delete`      | Make a live one the source · remove a draft                    |
-| `POST /import`                            | One language file `{ locale, strings }`, flat or nested        |
-| `POST /publish` · `POST /token`           | Publish the texts as they are · replace the build token        |
-| `POST /mcp`                               | Assistant access `{ on }`: a new MCP token, or none            |
-| `POST /versions/:version/publish`         | Publish an earlier version again, as the next one              |
-| `POST /consumers/:consumer/delete`        | Forget a site, so its keys stop counting as used               |
-| `POST /keys`                              | Add one `{ key, note, texts: { [locale]: text } }`             |
-| `GET · POST /keys/:key` · `POST …/delete` | Read · replace `{ note, texts, confirmed: [locale] }` · delete |
+| Request                                   | Does                                                                |
+| ----------------------------------------- | ------------------------------------------------------------------- |
+| `GET · POST /`                            | Languages, keys and texts, `404` before it starts · start           |
+| `POST /languages`                         | Add a draft language `{ locale }`                                   |
+| `POST /languages/:locale`                 | Put it live or take it offline `{ live }`                           |
+| `POST …/:locale/source` · `…/delete`      | Make a live one the source · remove a draft                         |
+| `POST /import/preview`                    | What files would change `{ files: [{ name, locale?, content }] }`   |
+| `POST /import`                            | Write picked changes `{ entries: [{ key, locale \| null, text }] }` |
+| `GET /export?locales=&prefix=&needs=`     | A linguitas file to download                                        |
+| `POST /publish` · `POST /token`           | Publish the texts as they are · replace the build token             |
+| `POST /mcp`                               | Assistant access `{ on }`: a new MCP token, or none                 |
+| `POST /versions/:version/publish`         | Publish an earlier version again, as the next one                   |
+| `POST /consumers/:consumer/delete`        | Forget a site, so its keys stop counting as used                    |
+| `POST /keys`                              | Add one `{ key, note, texts: { [locale]: text } }`                  |
+| `GET · POST /keys/:key` · `POST …/delete` | Read · replace `{ note, texts, confirmed: [locale] }` · delete      |
 
 An empty text removes it. Deleting a project in nexitas deletes its translations with it.
 
