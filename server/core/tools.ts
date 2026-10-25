@@ -3,7 +3,15 @@
 // Publishing stays the owner's, on the Translations page.
 import type { DatabaseSync } from 'node:sqlite'
 import { z } from 'zod'
-import { audit, keySchema, localeSchema, placeholders, type TextKey } from '../../shared/contracts'
+import {
+  audit,
+  keySchema,
+  localeSchema,
+  parseText,
+  placeholders,
+  pluralForms,
+  type TextKey,
+} from '../../shared/contracts'
 import { tool } from '../utils/mcp'
 import { addLocale, createKey, getKey, getSpace, listKeys, updateKey } from './translations'
 
@@ -13,7 +21,8 @@ const GLOSSARY = 40
 
 export const instructions = `linguitas holds this project's texts: keys (such as export.done) with a text per language, and a note on where the text appears.
 To port a site's strings: save_keys with the source language's texts and a note each, then translate for every other language and save_keys with what you wrote.
-Keep every {placeholder} exactly. Nothing reaches a site until the owner publishes on the Translations page.`
+Keep every {placeholder} exactly. A text that depends on a number is one ICU plural, never two keys: {count, plural, one {# bar} other {# bars}}; # is the number, and each language writes the forms it needs (translate names them).
+Nothing reaches a site until the owner publishes on the Translations page.`
 
 /** The project's tools, each bound to it. `changed` runs after a write, to tell open pages. */
 export function translationTools(db: DatabaseSync, projectId: string, changed = () => {}) {
@@ -118,7 +127,7 @@ export function translationTools(db: DatabaseSync, projectId: string, changed = 
     tool({
       name: 'translate',
       description:
-        "What you need to translate keys into a language: each key's source text, its note (where the text appears; let it decide the wording and length), the placeholders to keep, the current translation if any, and a glossary of the project's existing translations to stay consistent with. Without `keys`, every key that is missing, stale or has wrong placeholders in that language. Translate, then save_keys with texts: { [locale]: … }.",
+        "What you need to translate keys into a language: each key's source text, its note (where the text appears; let it decide the wording and length), the placeholders to keep, the plural forms the language needs (write an ICU plural with exactly those, # for the number), the current translation if any, and a glossary of the project's existing translations to stay consistent with. Without `keys`, every key that is missing, stale, or wrong in its placeholders or plural forms in that language. Translate, then save_keys with texts: { [locale]: … }.",
       input: z.object({
         locale: localeSchema,
         keys: z.array(keySchema).max(MAX_KEYS).optional(),
@@ -155,6 +164,10 @@ export function translationTools(db: DatabaseSync, projectId: string, changed = 
             note: key.note || undefined,
             source: key.texts[source]!.text,
             placeholders: placeholders(key.texts[source]!.text),
+            // The forms this language's plurals need, when the source has one.
+            pluralForms: parseText(key.texts[source]!.text).plurals.length
+              ? pluralForms(locale)
+              : undefined,
             current: key.texts[locale]?.text,
             // What the source said when the current translation was written.
             writtenFor:

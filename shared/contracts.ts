@@ -171,27 +171,97 @@ export const CHECKS = {
   missing: 'Missing',
   stale: 'Source changed',
   placeholders: 'Placeholders differ',
+  forms: 'Plural forms missing',
   unchanged: 'Same as source',
 } as const
 export type Check = keyof typeof CHECKS
 
-// shortcut: only {name} and {{name}} count as placeholders; add %s or :name once a site uses them.
-const PLACEHOLDER = /\{+\s*([A-Za-z0-9_.]+)/g
+// shortcut: only {name}, {{name}} and ICU plurals count; add select, %s or :name once a site uses them.
+const NAME = /^\{?\s*([A-Za-z0-9_.]+)\s*\}?$/
+const PLURAL = /^\s*([A-Za-z0-9_.]+)\s*,\s*plural\s*,/
+const FORM = /\s*(=\d+|[a-z]+)\s*\{/y
 
-/** The placeholder names in a text, sorted, each once. */
-export function placeholders(text: string) {
-  return [...new Set([...text.matchAll(PLACEHOLDER)].map((match) => match[1]!))].sort()
+/** Where the brace opened at `open` closes, or -1. */
+function closing(text: string, open: number) {
+  let depth = 0
+  for (let i = open; i < text.length; i++) {
+    if (text[i] === '{') depth++
+    else if (text[i] === '}' && --depth === 0) return i
+  }
+  return -1
 }
 
-/** What is wrong with a key's text in one language, if anything. The source can only be missing. */
+/** A text's placeholders, {name} and {{name}}, and its plural choices in ICU's syntax:
+ *  {count, plural, one {# bar} other {# bars}}, each with the forms it names. `broken` when a
+ *  brace does not close or a plural does not read. */
+export function parseText(text: string) {
+  const names = new Set<string>()
+  const plurals: { name: string; forms: string[] }[] = []
+  let broken = false
+  const walk = (part: string) => {
+    for (let at = part.indexOf('{'); at >= 0;) {
+      const close = closing(part, at)
+      if (close < 0) return void (broken = true)
+      const inner = part.slice(at + 1, close)
+      const plural = PLURAL.exec(inner)
+      if (plural) {
+        names.add(plural[1]!)
+        const forms: string[] = []
+        let rest = inner.slice(plural[0].length)
+        for (FORM.lastIndex = 0; ; FORM.lastIndex = 0) {
+          const form = FORM.exec(rest)
+          if (!form) break
+          const end = closing(rest, form[0].length - 1)
+          if (end < 0) break
+          forms.push(form[1]!)
+          walk(rest.slice(form[0].length, end))
+          rest = rest.slice(end + 1)
+        }
+        if (!forms.length || rest.trim()) broken = true
+        plurals.push({ name: plural[1]!, forms })
+      } else {
+        const name = NAME.exec(inner)
+        if (name) names.add(name[1]!)
+      }
+      at = part.indexOf('{', close + 1)
+    }
+  }
+  walk(text)
+  return { names: [...names].sort(), plurals, broken }
+}
+
+/** The placeholder names in a text, sorted, each once; a plural's count is one. */
+export const placeholders = (text: string) => parseText(text).names
+
+/** The plural forms a language tells apart, as ICU names them: en one, other; pl one, few,
+ *  many, other. */
+export function pluralForms(locale: string) {
+  try {
+    return new Intl.PluralRules(locale).resolvedOptions().pluralCategories as string[]
+  } catch {
+    return ['other']
+  }
+}
+
+/** Whether a text's plurals lack a form its language needs, or do not read. */
+export function lacksForms(text: string, locale: string) {
+  const { plurals, broken } = parseText(text)
+  if (broken) return true
+  const needed = pluralForms(locale)
+  return plurals.some((plural) => needed.some((form) => !plural.forms.includes(form)))
+}
+
+/** What is wrong with a key's text in one language, if anything. The source can only be missing,
+ *  or lack plural forms. */
 export function audit(key: TextKey, locale: string, source: string): Check[] {
   const text = key.texts[locale]
   if (!text) return ['missing']
-  if (locale === source) return []
+  if (locale === source) return lacksForms(text.text, locale) ? ['forms'] : []
   const original = key.texts[source]?.text ?? ''
   const checks: Check[] = []
   if (text.basedOn !== original) checks.push('stale')
   if (placeholders(text.text).join() !== placeholders(original).join()) checks.push('placeholders')
+  if (lacksForms(text.text, locale)) checks.push('forms')
   if (text.text === original) checks.push('unchanged')
   return checks
 }

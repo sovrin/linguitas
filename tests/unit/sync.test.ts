@@ -133,4 +133,40 @@ describe('client', () => {
     expect(mode({ draft: true }, false).error).toMatch(/LINGUITAS_URL/)
     expect(mode({ ...named, token: 'lt_x', draft: true }, true).error).toMatch(/development/)
   })
+
+  it('chooses the plural form for the count, by the language of the text it found', () => {
+    client.start(
+      {
+        version: 1,
+        source: 'en',
+        texts: {
+          en: { bars: '{count, plural, =0 {no bars} one {# bar} other {# bars}}', only: 'English' },
+          pl: {
+            bars: '{count, plural, one {# takt} few {# takty} many {# taktów} other {# taktu}}',
+          },
+        },
+      },
+      { locale: 'pl' },
+    )
+    expect([1, 2, 5, 22].map((count) => client.t('bars', { count }))).toEqual([
+      '1 takt',
+      '2 takty',
+      '5 taktów',
+      '22 takty',
+    ])
+    expect(client.t('only')).toBe('English')
+    client.start({
+      version: 1,
+      source: 'en',
+      texts: { en: { bars: '{count, plural, =0 {no bars} one {# bar} other {# bars}}' } },
+    })
+    expect([0, 1, 1234].map((count) => client.t('bars', { count }))).toEqual([
+      'no bars',
+      '1 bar',
+      '1,234 bars',
+    ])
+    expect(client.t('bars', { count: 'x' })).toBe(
+      '{count, plural, =0 {no bars} one {# bar} other {# bars}}',
+    )
+  })
 })

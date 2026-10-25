@@ -12,8 +12,11 @@ import {
   flatten,
   keyInputSchema,
   localeInputSchema,
+  lacksForms,
   localeOfFileName,
+  parseText,
   placeholders,
+  pluralForms,
   readImportFile,
 } from '../../shared/contracts'
 import {
@@ -106,6 +109,39 @@ describe('translations', () => {
     expect(audit(key, 'de', 'en')).toEqual(['placeholders'])
     expect(audit(key, 'fr', 'en')).toEqual(['unchanged'])
     expect(countProblems([key], ['en', 'fr'])).toBe(0)
+  })
+
+  it('reads ICU plurals: their count is a placeholder, and each language needs its forms', () => {
+    const en = '{count, plural, =0 {no bars} one {# bar in {song}} other {# bars in {song}}}'
+    expect(parseText(en)).toEqual({
+      names: ['count', 'song'],
+      plurals: [{ name: 'count', forms: ['=0', 'one', 'other'] }],
+      broken: false,
+    })
+    expect(placeholders('Hi {name}, {{ name }} and {other}')).toEqual(['name', 'other'])
+    expect(parseText('{count, plural, one {# bar}').broken).toBe(true)
+    expect(parseText('{count, plural, one {# bar} oops}').broken).toBe(true)
+    expect(pluralForms('pl')).toEqual(['one', 'few', 'many', 'other'])
+    expect(lacksForms(en, 'en')).toBe(false)
+    expect(lacksForms('{count, plural, one {# takt} other {# taktu}}', 'pl')).toBe(true)
+    expect(
+      lacksForms('{n, plural, one {# takt} few {# takty} many {# taktów} other {# taktu}}', 'pl'),
+    ).toBe(false)
+    const key = {
+      key: 'bars',
+      note: '',
+      updatedAt: 0,
+      texts: {
+        en: { text: '{count, plural, one {# bar} other {# bars}}', basedOn: null, updatedAt: 0 },
+        pl: {
+          text: '{count, plural, one {# takt} other {# taktów}}',
+          basedOn: '{count, plural, one {# bar} other {# bars}}',
+          updatedAt: 0,
+        },
+      },
+    }
+    expect(audit(key, 'pl', 'en')).toEqual(['forms'])
+    expect(audit(key, 'en', 'en')).toEqual([])
   })
 
   it('skips what a file nests deeper than it reads', () => {

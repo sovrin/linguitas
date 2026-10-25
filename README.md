@@ -34,12 +34,13 @@ owner         ── /p/<project>/translations                 keys × languages
 
 ### The audit
 
-| Check               | Means                                                                 |
-| ------------------- | --------------------------------------------------------------------- |
-| Missing             | The key has no text in this language                                  |
-| Source changed      | The source text changed after this translation was written            |
-| Placeholders differ | `{name}` or `{{name}}` in the source and the translation do not match |
-| Same as source      | The translation is the source text; often fine ("OK"), never counted  |
+| Check                | Means                                                                    |
+| -------------------- | ------------------------------------------------------------------------ |
+| Missing              | The key has no text in this language                                     |
+| Source changed       | The source text changed after this translation was written               |
+| Placeholders differ  | `{name}` or `{{name}}` in the source and the translation do not match    |
+| Plural forms missing | A plural lacks a form its language needs (Polish: one, few, many, other) |
+| Same as source       | The translation is the source text; often fine ("OK"), never counted     |
 
 A translation remembers the source text it was written for. When the source changes, it is stale
 until it is changed, or confirmed on its key's page ("Still fits the source").
@@ -100,6 +101,19 @@ down. `watch` picks up newer published versions while the site runs: in a browse
 the tab is shown again, on a server every minute. A version's files never change and are cached for
 good; checking for a new one is a `304` while nothing changed. It keeps nothing in storage and
 reports nothing: a build reports, browsers never do.
+
+**Plurals** are one key whose text chooses by a count, in ICU's syntax, which most i18n tools
+read:
+
+```
+en: {count, plural, one {# bar} other {# bars}}
+pl: {count, plural, one {# takt} few {# takty} many {# taktów} other {# taktu}}
+```
+
+`t('song.bars', { count })` picks the form with the browser's `Intl.PluralRules` for the text's
+language; `#` is the count as that language writes numbers, and `=0 {no bars}` wins for exactly
+that number. Each language writes the forms it tells apart (English two, Polish four); the audit
+flags "Plural forms missing" when a text lacks one, and the MCP `translate` tool names them.
 
 **Texts are plain text, never HTML.** `t()` returns what was typed in the admin, as it was typed.
 Render it as text (`{{ t('…') }}`, `textContent`), never as HTML (`v-html`, `innerHTML`): anyone
