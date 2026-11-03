@@ -45,6 +45,20 @@ owner         ── /p/<project>/translations                 keys × languages
 A translation remembers the source text it was written for. When the source changes, it is stale
 until it is changed, or confirmed on its key's page ("Still fits the source").
 
+## Sites without the sync script
+
+A site needs two files from linguitas, both committed: its texts, every language in one
+`texts.json`, and the client. A download is all it takes; the build then needs nothing else:
+
+```sh
+curl -o app/linguitas/texts.json https://nexitas.example.com/v1/translations/<project>/texts.json
+curl -o app/linguitas/client.js https://nexitas.example.com/v1/translations/client.js
+```
+
+`/draft/texts.json` with the build token (`Authorization: Bearer …`) has the texts as they are
+now, for development. The checks sync makes (every key a literal, known, and used) are then the
+site's own: a test that compares the `t('…')` keys in its code with the committed texts does it.
+
 ## Sites: sync and the client
 
 A site uses linguitas through two files linguitas serves, so nothing is published to npm:
@@ -60,10 +74,9 @@ LINGUITAS_TOKEN=<build token> node scripts/linguitas.mjs --consumer web
 
 ```ts
 import texts from './linguitas/texts.json'
-import { start, t, watch } from './linguitas/client'
+import { start, t } from './linguitas/client'
 
 start(texts, { locale: 'de' })
-watch({ url: 'https://nexitas.example.com/v1/translations/<project>' })
 t('checkout.pay') // "Bezahlen"
 t('export.done', { minutes: 3 }) // placeholders, typed by keys.d.ts
 ```
@@ -96,11 +109,9 @@ way the build knows every key a site uses.
 `--draft` (with the build token, refused in CI) fetches the texts as they are now, so a key works
 in development before it is published.
 
-**The client** starts with the build's texts, so `t()` works at once, offline, and if linguitas is
-down. `watch` picks up newer published versions while the site runs: in a browser on start and when
-the tab is shown again, on a server every minute. A version's files never change and are cached for
-good; checking for a new one is a `304` while nothing changed. It keeps nothing in storage and
-reports nothing: a build reports, browsers never do.
+**The client** works from the build's texts: `t()` works at once, offline, and whether linguitas
+is up or not. Published texts reach a site with its next build. It fetches, keeps and reports
+nothing: a build reports, browsers never do.
 
 **Plurals** are one key whose text chooses by a count, in ICU's syntax, which most i18n tools
 read:
@@ -127,6 +138,7 @@ Published texts are open: no token, any origin. They are in every page that show
 | -------------------------------------------- | ------------------------------------------------------------- |
 | `GET /v1/translations/:project`              | `{ slug, name, source, locales, version, publishedAt, sync }` |
 | `GET /v1/translations/:project/:lg`          | `{ "checkout.pay": "Bezahlen", … }` of the current version    |
+| `GET /v1/translations/:project/texts.json`   | Every published language in one file, as a site commits it    |
 | `GET /v1/translations/:project/:v/:lg.json`  | the same of version `v`, cached for good                      |
 | `GET /v1/translations/:project/:v/keys.d.ts` | version `v`'s keys, typed for the client                      |
 
@@ -196,6 +208,7 @@ claude mcp add --transport http linguitas https://nexitas.example.com/v1/transla
 | `save_keys`    | Create keys or change their note and texts, up to 200 at a time; returns the audit   |
 | `translate`    | What translating keys into a language takes: source, note, placeholders, a glossary  |
 | `add_language` | Add a draft language                                                                 |
+| `delete_keys`  | Delete keys with their notes and texts, up to 200 at a time (they cannot come back)  |
 
 **The assistant translates, not linguitas.** `translate` gives it each key's source text, its
 note (where the text appears, so it decides the wording and the length), the placeholders to keep,

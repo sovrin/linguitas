@@ -203,10 +203,9 @@ const buildSnippet = computed(() =>
 )
 const siteSnippet = [
   `import texts from './linguitas/texts.json'`,
-  `import { start, t, watch } from './linguitas/client'`,
+  `import { start, t } from './linguitas/client'`,
   ``,
   `start(texts, { locale: 'de' })`,
-  `watch({ url: '${origin}/v1/translations/${project}' })`,
   `t('checkout.pay')`,
 ].join('\n')
 async function startTranslations() {
@@ -469,7 +468,7 @@ async function rotate() {
         </AppSection>
         <AppSection title="Site">
           <p class="text-s text-muted">
-            The site starts with what sync fetched and reads newer published texts as it runs.
+            The site works from what sync fetched; new texts come with its next build.
           </p>
           <EmbedCode :code="siteSnippet" />
         </AppSection>

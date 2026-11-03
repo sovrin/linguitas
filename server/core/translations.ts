@@ -264,8 +264,12 @@ export function updateKey(
   })
 }
 
+/** Deletes a key with its texts in every language. False when the project has no such key. */
 export function deleteKey(db: DatabaseSync, projectId: string, key: string) {
-  db.prepare('DELETE FROM translation_keys WHERE project_id = ? AND key = ?').run(projectId, key)
+  return (
+    db.prepare('DELETE FROM translation_keys WHERE project_id = ? AND key = ?').run(projectId, key)
+      .changes === 1
+  )
 }
 
 /** What importing `entries` would change, one row each, against the project as it is now. An

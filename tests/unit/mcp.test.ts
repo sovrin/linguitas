@@ -79,6 +79,7 @@ describe('mcp', () => {
       'save_keys',
       'translate',
       'add_language',
+      'delete_keys',
     ])
     expect(listed.result.tools.every((tool) => tool.inputSchema.type === 'object')).toBe(true)
     expect(answerMessage({ jsonrpc: '2.0', method: 'notifications/initialized' }, mcp)).toBeNull()
@@ -164,6 +165,25 @@ describe('mcp', () => {
       locale: 'fr',
       live: false,
     })
+  })
+
+  it('deletes keys with their texts, and names the ones it did not find', () => {
+    const db = database()
+    const { call, changes } = server(db)
+    call('save_keys', {
+      keys: [
+        { key: 'bars.one', texts: { en: '1 bar', de: '1 Takt' } },
+        { key: 'keep', texts: { en: 'Keep' } },
+      ],
+    })
+    expect(call('delete_keys', { keys: ['bars.one', 'nope'] })).toEqual({
+      deleted: ['bars.one'],
+      notFound: ['nope'],
+    })
+    expect(getKey(db, 'sonotas', 'bars.one')).toBeNull()
+    expect(getKey(db, 'sonotas', 'keep')).not.toBeNull()
+    expect(changes()).toBe(2)
+    expect(call('delete_keys', { keys: [] }).error).toBeDefined()
   })
 
   it('has no token until the owner turns access on, and a new one each time', () => {

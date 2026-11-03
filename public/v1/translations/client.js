@@ -1,7 +1,6 @@
 // linguitas' client: `t()` over the texts a site's build fetched (sync writes this file beside
-// them), and newer published versions picked up while the site runs, without a rebuild. One set of
-// texts per page or process. It keeps nothing anywhere and reports nothing: what a site uses, its
-// build reports.
+// them). New texts come with the next build. One set of texts per page or process; it fetches,
+// keeps and reports nothing.
 
 // {name}, {{name}} and ICU plurals ({count, plural, one {# bar} other {# bars}}), as linguitas'
 // audit reads them.
@@ -12,8 +11,6 @@ const FORM = /\s*(=\d+|[a-z]+)\s*\{/y
 /** @type {import('./client').Texts} */
 let current = { version: 0, source: 'en', texts: {} }
 let locale = 'en'
-/** @type {string | undefined} Where newer versions come from, once `watch` is called. */
-let base
 /** @type {Set<() => void>} */
 const listeners = new Set()
 
@@ -86,59 +83,16 @@ export function getLocale() {
   return locale
 }
 
-/** Switches the language. One the build did not bring is loaded first, once `watch` runs. */
-export async function setLocale(next) {
-  if (!current.texts[next] && base && current.version) {
-    const texts = await load(`${base}/${current.version}/${next}.json`)
-    if (texts) current = { ...current, texts: { ...current.texts, [next]: texts } }
-  }
+/** Switches the language, to one of the build's. */
+export function setLocale(next) {
   locale = next
   notify()
 }
 
-/** Calls `listener` whenever the texts or the language change: to render again. */
+/** Calls `listener` whenever the language changes: to render again. */
 export function subscribe(listener) {
   listeners.add(listener)
   return () => listeners.delete(listener)
-}
-
-/** Picks up newer published versions from `url` (`https://…/v1/translations/<project>`): in a
- *  browser on start and whenever the tab is shown again, on a server every `interval` ms. Checking
- *  is a 304 while nothing changed. Returns how to stop. */
-export function watch({ url, interval = 60_000 }) {
-  base = url.replace(/\/+$/, '')
-  const check = () => update().catch(() => {})
-  check()
-  if (typeof document !== 'undefined') {
-    const onShow = () => document.visibilityState === 'visible' && check()
-    document.addEventListener('visibilitychange', onShow)
-    return () => document.removeEventListener('visibilitychange', onShow)
-  }
-  const timer = setInterval(check, interval)
-  timer.unref?.()
-  return () => clearInterval(timer)
-}
-
-async function update() {
-  const response = await fetch(base, { cache: 'no-cache' })
-  if (!response.ok) return
-  const manifest = await response.json()
-  if (manifest.version <= current.version) return
-  // The source and the language in use; others load when a site switches to them.
-  const wanted = [...new Set([manifest.source, locale])].filter((l) => manifest.locales.includes(l))
-  const texts = await Promise.all(wanted.map((l) => load(`${base}/${manifest.version}/${l}.json`)))
-  if (texts.some((file) => !file)) return
-  current = {
-    version: manifest.version,
-    source: manifest.source,
-    texts: Object.fromEntries(wanted.map((l, i) => [l, texts[i]])),
-  }
-  notify()
-}
-
-async function load(url) {
-  const response = await fetch(url)
-  return response.ok ? response.json() : null
 }
 
 function notify() {
