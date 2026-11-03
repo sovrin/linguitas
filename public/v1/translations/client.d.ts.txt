@@ -21,6 +21,5 @@ export interface Texts {
 export function start(texts: Texts, options?: { locale?: string }): void
 export function t<K extends Key>(key: K, ...params: Params<K>): string
 export function getLocale(): string
-export function setLocale(locale: string): Promise<void>
+export function setLocale(locale: string): void
 export function subscribe(listener: () => void): () => void
-export function watch(options: { url: string; interval?: number }): () => void

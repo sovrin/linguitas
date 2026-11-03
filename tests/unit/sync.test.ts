@@ -1,5 +1,5 @@
 import { resolve } from 'node:path'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { SYNC_VERSION } from '../../shared/contracts'
 // The served files are plain JavaScript; the tests run them as sites do.
 import * as client from '../../public/v1/translations/client.js'
@@ -78,8 +78,6 @@ function other(t: (key: string) => string) {
 })
 
 describe('client', () => {
-  afterEach(() => vi.unstubAllGlobals())
-
   it('falls back to the source and fills placeholders', () => {
     client.start(
       {
@@ -95,25 +93,13 @@ describe('client', () => {
     expect(client.t('gone')).toBe('gone')
   })
 
-  it('swaps in a newer version and tells its listeners', async () => {
-    client.start(
-      { version: 1, source: 'en', texts: { en: { hi: 'Hi' }, de: { hi: 'Hallo' } } },
-      { locale: 'de' },
-    )
-    const files: Record<string, unknown> = {
-      'https://x/v1/translations/p': { version: 2, source: 'en', locales: ['en', 'de'] },
-      'https://x/v1/translations/p/2/en.json': { hi: 'Hello' },
-      'https://x/v1/translations/p/2/de.json': { hi: 'Servus' },
-    }
-    vi.stubGlobal('fetch', async (url: string) => ({
-      ok: url in files,
-      json: async () => files[url],
-    }))
-    const changed = new Promise<void>((done) => client.subscribe(done))
-    const stop = client.watch({ url: 'https://x/v1/translations/p/' })
-    await changed
+  it('switches the language and tells its listeners', () => {
+    client.start({ version: 1, source: 'en', texts: { en: { hi: 'Hi' }, de: { hi: 'Hallo' } } })
+    let told = 0
+    const stop = client.subscribe(() => told++)
+    client.setLocale('de')
     stop()
-    expect(client.t('hi')).toBe('Servus')
+    expect([client.t('hi'), client.getLocale(), told]).toEqual(['Hallo', 'de', 1])
   })
 
   it('builds without linguitas, and reports only with the token', () => {

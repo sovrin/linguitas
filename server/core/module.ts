@@ -96,10 +96,11 @@ export const linguitas: NexitasModule = {
           originless: true,
         }),
     },
-    // Read by sites, apps and build steps anywhere: the manifest, a language, a version's files,
+    // Read by sites, apps and build steps anywhere: the manifest, a language, all of them in one
+    // texts.json, a version's files,
     // and the draft (with the build token). Published texts are open: every page has them.
     {
-      path: /^\/v1\/translations\/([a-z0-9-]+)(?:\/[A-Za-z0-9-]+|\/(?:\d+|draft)\/(?:[A-Za-z0-9-]+\.json|keys\.d\.ts))?$/,
+      path: /^\/v1\/translations\/([a-z0-9-]+)(?:\/[A-Za-z0-9-]+|\/texts\.json|\/(?:\d+|draft)\/(?:[A-Za-z0-9-]+\.json|keys\.d\.ts))?$/,
       json: true,
       guard: (event) => readOnlyCors(event, 'The translations API only reads.'),
     },

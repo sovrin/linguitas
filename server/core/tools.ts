@@ -13,7 +13,15 @@ import {
   type TextKey,
 } from '../../shared/contracts'
 import { tool } from '../utils/mcp'
-import { addLocale, createKey, getKey, getSpace, listKeys, updateKey } from './translations'
+import {
+  addLocale,
+  createKey,
+  deleteKey,
+  getKey,
+  getSpace,
+  listKeys,
+  updateKey,
+} from './translations'
 
 const MAX_KEYS = 200
 // Enough for a translation to stay with the words the project already uses.
@@ -190,6 +198,16 @@ export function translationTools(db: DatabaseSync, projectId: string, changed = 
         const added = addLocale(db, projectId, locale)
         if (added) changed()
         return { locale, added }
+      },
+    }),
+    tool({
+      name: 'delete_keys',
+      description: `Deletes keys with their note and their texts in every language, up to ${MAX_KEYS} at a time; a deleted key cannot be brought back. Published versions keep their texts until the owner publishes again. For keys no code uses any more, such as two keys folded into one plural.`,
+      input: z.object({ keys: z.array(keySchema).min(1).max(MAX_KEYS) }),
+      run: ({ keys }) => {
+        const deleted = keys.filter((key) => deleteKey(db, projectId, key))
+        if (deleted.length) changed()
+        return { deleted, notFound: keys.filter((key) => !deleted.includes(key)) }
       },
     }),
   ]
