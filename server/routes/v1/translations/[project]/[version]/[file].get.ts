@@ -1,9 +1,9 @@
 import type { DatabaseSync } from 'node:sqlite'
 import { nexitasDatabase } from '#nexitas/server/utils/nexitas'
-import { LOCALE } from '../../../../../../shared/contracts'
-import { keysDeclaration } from '../../../../../core/declarations'
-import { getVersionTexts } from '../../../../../core/translations'
-import { answerCached } from '../../../../../utils/linguitas'
+import { LOCALE } from '#self/shared/contracts'
+import { keysDeclaration } from '#self/server/core/declarations'
+import { getVersionTexts } from '#self/server/core/translations'
+import { answerCached } from '#self/server/utils/linguitas'
 
 /** A version's files: `<locale>.json`, its texts in that language, and `keys.d.ts`, its keys
  *  typed for a site's `t()`. A version never changes, so they are cached for good. The draft's

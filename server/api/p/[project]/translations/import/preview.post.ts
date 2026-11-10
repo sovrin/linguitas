@@ -1,12 +1,8 @@
 import { invalid } from '#nexitas/server/utils/invalid'
 import { nexitasDatabase } from '#nexitas/server/utils/nexitas'
-import {
-  importFilesSchema,
-  readImportFile,
-  type ImportPreview,
-} from '../../../../../../shared/contracts'
-import { previewImport } from '../../../../../core/translations'
-import { translationSpace } from '../../../../../utils/linguitas'
+import { importFilesSchema, readImportFile, type ImportPreview } from '#self/shared/contracts'
+import { previewImport } from '#self/server/core/translations'
+import { translationSpace } from '#self/server/utils/linguitas'
 
 /** What importing the files would change, row by row; nothing is written yet. */
 export default defineEventHandler(async (event): Promise<ImportPreview> => {

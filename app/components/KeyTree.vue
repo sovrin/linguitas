@@ -6,8 +6,8 @@ import {
   missingKeys,
   type Check,
   type TranslationSpace,
-} from '../../shared/contracts'
-import type { Filter, State, TreeRow } from '../../shared/tree'
+} from '#self/shared/contracts'
+import type { Filter, State, TreeRow } from '#self/shared/tree'
 
 /** <KeyTree :selected="key"><template #aside>…</template></KeyTree>
  *  A project's translations as one tree of keys at their dots, any depth: each key with its source

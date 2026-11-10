@@ -5,16 +5,16 @@ import type { DatabaseSync } from 'node:sqlite'
 import { afterEach, describe, expect, it } from 'vitest'
 import { openDatabase } from '#nexitas/server/core/database'
 import { createProject } from '#nexitas/server/core/projects'
-import { linguitas } from '../../server/core/module'
-import { instructions, translationTools } from '../../server/core/tools'
+import { linguitas } from '#self/server/core/module'
+import { instructions, translationTools } from '#self/server/core/tools'
 import {
   addLocale,
   createSpace,
   getKey,
   getSpace,
   setMcpAccess,
-} from '../../server/core/translations'
-import { answerMessage } from '../../server/utils/mcp'
+} from '#self/server/core/translations'
+import { answerMessage } from '#self/server/utils/mcp'
 
 const dirs: string[] = []
 const dbs: DatabaseSync[] = []

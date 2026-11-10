@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { CHECKS, audit, type TextKey } from '../../shared/contracts'
+import { CHECKS, audit, type TextKey } from '#self/shared/contracts'
 
 /** Writes a new key, or edits `textKey`: its note and a text per language, the source first. Each
  *  translation shows what the audit finds as it is typed, as the server will store it. */

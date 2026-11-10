@@ -1,9 +1,9 @@
 import { announceChange } from '#nexitas/server/utils/changes'
 import { invalid } from '#nexitas/server/utils/invalid'
 import { nexitasDatabase } from '#nexitas/server/utils/nexitas'
-import { newKeySchema } from '../../../../../../shared/contracts'
-import { createKey, getKey } from '../../../../../core/translations'
-import { translationSpace } from '../../../../../utils/linguitas'
+import { newKeySchema } from '#self/shared/contracts'
+import { createKey, getKey } from '#self/server/core/translations'
+import { translationSpace } from '#self/server/utils/linguitas'
 
 export default defineEventHandler(async (event) => {
   const { project, space } = translationSpace(event)

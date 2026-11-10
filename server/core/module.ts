@@ -4,7 +4,7 @@
 import type { NexitasModule } from '#nexitas/shared/modules'
 import { formatCount, plural } from '#nexitas/app/lib/format'
 import { projectCors, readOnlyCors } from '#nexitas/server/utils/cors'
-import { countProblems, missingKeys } from '../../shared/contracts'
+import { countProblems, missingKeys } from '#self/shared/contracts'
 import {
   deleteSpace,
   getSpace,

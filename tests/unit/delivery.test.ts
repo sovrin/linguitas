@@ -5,9 +5,9 @@ import type { DatabaseSync } from 'node:sqlite'
 import { afterEach, describe, expect, it } from 'vitest'
 import { openDatabase } from '#nexitas/server/core/database'
 import { createProject } from '#nexitas/server/core/projects'
-import { keyInputSchema, reportSchema } from '../../shared/contracts'
-import { keysDeclaration } from '../../server/core/declarations'
-import { linguitas } from '../../server/core/module'
+import { keyInputSchema, reportSchema } from '#self/shared/contracts'
+import { keysDeclaration } from '#self/server/core/declarations'
+import { linguitas } from '#self/server/core/module'
 import {
   addLocale,
   createKey,
@@ -20,14 +20,14 @@ import {
   republish,
   setLive,
   updateKey,
-} from '../../server/core/translations'
+} from '#self/server/core/translations'
 import {
   listConsumers,
   listUsage,
   MAX_CONSUMERS,
   removeConsumer,
   saveReport,
-} from '../../server/core/usage'
+} from '#self/server/core/usage'
 
 const dirs: string[] = []
 const dbs: DatabaseSync[] = []
