@@ -1,7 +1,7 @@
 import { announceChange } from '#nexitas/server/utils/changes'
 import { nexitasDatabase } from '#nexitas/server/utils/nexitas'
 import { requestProject } from '#nexitas/server/utils/projects'
-import { createSpace } from '../../../../core/translations'
+import { createSpace } from '#self/server/core/translations'
 
 /** Starts translations for the project: a read token, and English as the source. */
 export default defineEventHandler((event) => {

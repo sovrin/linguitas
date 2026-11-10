@@ -11,8 +11,8 @@ import {
   placeholders,
   pluralForms,
   type TextKey,
-} from '../../shared/contracts'
-import { tool } from '../utils/mcp'
+} from '#self/shared/contracts'
+import { tool } from '#self/server/utils/mcp'
 import {
   addLocale,
   createKey,

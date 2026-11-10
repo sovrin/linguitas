@@ -13,8 +13,9 @@ Conventions for working on linguitas, in code and in the interface.
   source, each live or a draft), its keys with their texts, and what was last published. They are set up on the
   Translations page (`app/components/KeyTree.vue`): started there, and its Setup holds the build
   and site snippets, assistant access and the build token.
-- Import by relative path (or `#nexitas/...`): `~` and `#shared` resolve against nexitas, the app
-  around this layer. Nothing app-wide lives here: no name, logo, favicon or sign-in lines.
+- Import your own files through `#self/...` and the core through `#nexitas/...`: `~` and `#shared`
+  resolve against nexitas, the app around this layer. Nothing app-wide lives here: no name, logo,
+  favicon or sign-in lines.
 - Keep comprehension debt low: explicit control flow, small modules, framework conventions, no
   speculative abstractions. Comments say why, not what.
 - Every rule about input lives once, in `shared/contracts.ts` (zod), and is checked at runtime on

@@ -1,7 +1,7 @@
 import { announceChange } from '#nexitas/server/utils/changes'
 import { nexitasDatabase } from '#nexitas/server/utils/nexitas'
-import { getSpace, republish } from '../../../../../../core/translations'
-import { translationSpace } from '../../../../../../utils/linguitas'
+import { getSpace, republish } from '#self/server/core/translations'
+import { translationSpace } from '#self/server/utils/linguitas'
 
 /** Publishes an earlier version's texts again, as the next version: the way back from a publish
  *  that should not have gone out. */
