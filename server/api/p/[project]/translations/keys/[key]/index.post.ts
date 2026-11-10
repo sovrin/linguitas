@@ -1,9 +1,9 @@
 import { announceChange } from '#nexitas/server/utils/changes'
 import { invalid } from '#nexitas/server/utils/invalid'
 import { nexitasDatabase } from '#nexitas/server/utils/nexitas'
-import { keyInputSchema } from '../../../../../../../shared/contracts'
-import { getKey, updateKey } from '../../../../../../core/translations'
-import { routeKey, translationSpace } from '../../../../../../utils/linguitas'
+import { keyInputSchema } from '#self/shared/contracts'
+import { getKey, updateKey } from '#self/server/core/translations'
+import { routeKey, translationSpace } from '#self/server/utils/linguitas'
 
 /** A new note and texts. The key stays: sites look the texts up by it. */
 export default defineEventHandler(async (event) => {

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { TranslationSpace } from '../../../../../shared/contracts'
+import type { TranslationSpace } from '#self/shared/contracts'
 
 // The project's keys, notes and texts as one linguitas file: all of it as a backup, or some
 // languages and keys to hand a translator. Import takes the file back.

@@ -4,8 +4,8 @@ import { getProject } from '#nexitas/server/core/projects'
 import { requireBearer } from '#nexitas/server/utils/auth'
 import { nexitasDatabase } from '#nexitas/server/utils/nexitas'
 import { requestProject } from '#nexitas/server/utils/projects'
-import { isKey } from '../../shared/contracts'
-import { getKey, getSpace, type Space } from '../core/translations'
+import { isKey } from '#self/shared/contracts'
+import { getKey, getSpace, type Space } from '#self/server/core/translations'
 
 /** The request's project with its translations, or a 404: the Translations page reads that as not
  *  started yet. */

@@ -1,9 +1,9 @@
 import { z } from 'zod'
 import { invalid } from '#nexitas/server/utils/invalid'
 import { nexitasDatabase } from '#nexitas/server/utils/nexitas'
-import { localeSchema } from '../../../../../shared/contracts'
-import { exportTexts } from '../../../../core/translations'
-import { translationSpace } from '../../../../utils/linguitas'
+import { localeSchema } from '#self/shared/contracts'
+import { exportTexts } from '#self/server/core/translations'
+import { translationSpace } from '#self/server/utils/linguitas'
 
 const querySchema = z.object({
   /** Comma-separated; every language when left out. */

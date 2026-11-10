@@ -5,10 +5,10 @@ import {
   countProblems,
   type Check,
   type TranslationSpace,
-} from '../../../../../shared/contracts'
-import { isUnpublished, listKeys, listVersions } from '../../../../core/translations'
-import { listConsumers, listUsage } from '../../../../core/usage'
-import { translationSpace } from '../../../../utils/linguitas'
+} from '#self/shared/contracts'
+import { isUnpublished, listKeys, listVersions } from '#self/server/core/translations'
+import { listConsumers, listUsage } from '#self/server/core/usage'
+import { translationSpace } from '#self/server/utils/linguitas'
 
 /** The project's languages, how its keys stand, summed up, and how they stand against the publish.
  *  The keys themselves come a level at a time from tree.get.ts. */
