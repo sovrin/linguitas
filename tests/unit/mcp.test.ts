@@ -14,7 +14,7 @@ import {
   getSpace,
   setMcpAccess,
 } from '#self/server/core/translations'
-import { answerMessage } from '#self/server/utils/mcp'
+import { answerMessage } from '#nexitas/server/utils/mcp'
 
 const dirs: string[] = []
 const dbs: DatabaseSync[] = []

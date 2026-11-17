@@ -12,7 +12,7 @@ import {
   pluralForms,
   type TextKey,
 } from '#self/shared/contracts'
-import { tool } from '#self/server/utils/mcp'
+import { tool } from '#nexitas/server/utils/mcp'
 import {
   addLocale,
   createKey,
