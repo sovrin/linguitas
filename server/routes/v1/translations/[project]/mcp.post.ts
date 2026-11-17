@@ -3,7 +3,7 @@ import { announceChange } from '#nexitas/server/utils/changes'
 import { nexitasDatabase } from '#nexitas/server/utils/nexitas'
 import { getSpace } from '#self/server/core/translations'
 import { instructions, translationTools } from '#self/server/core/tools'
-import { answerMcp } from '#self/server/utils/mcp'
+import { answerMcp } from '#nexitas/server/utils/mcp'
 
 /** The project's texts for an assistant, over MCP, with the project's MCP token. An unknown
  *  project, MCP switched off and a wrong token look the same. */
