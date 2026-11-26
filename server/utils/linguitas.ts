@@ -4,7 +4,8 @@ import { getProject } from '#nexitas/server/core/projects'
 import { requireBearer } from '#nexitas/server/utils/auth'
 import { nexitasDatabase } from '#nexitas/server/utils/nexitas'
 import { requestProject } from '#nexitas/server/utils/projects'
-import { isKey } from '#self/shared/contracts'
+import { changesetNameSchema, isKey } from '#self/shared/contracts'
+import { getChangeset } from '#self/server/core/changesets'
 import { getKey, getSpace, type Space } from '#self/server/core/translations'
 
 /** The request's project with its translations, or a 404: the Translations page reads that as not
@@ -31,6 +32,26 @@ export function routeLocale(event: H3Event, space: Space) {
   if (!space.locales.includes(locale))
     throw createError({ statusCode: 404, statusMessage: 'The project has no such language.' })
   return locale
+}
+
+/** The changeset a route names, or a 404. */
+export function routeChangeset(event: H3Event, projectId: string) {
+  return namedChangeset(projectId, getRouterParam(event, 'name', { decode: true }))
+}
+
+/** The changeset a developer's build asks for (?changeset=), null when it names none, or a 404. */
+export function queryChangeset(event: H3Event, projectId: string) {
+  const name = getQuery(event).changeset
+  return name === undefined ? null : namedChangeset(projectId, name)
+}
+
+function namedChangeset(projectId: string, name: unknown) {
+  const changeset = changesetNameSchema.safeParse(name).success
+    ? getChangeset(nexitasDatabase(), projectId, name as string)
+    : null
+  if (!changeset)
+    throw createError({ statusCode: 404, statusMessage: 'There is no such changeset.' })
+  return changeset
 }
 
 /** The project of a build's request (a draft, a report) and its translations, if the bearer is

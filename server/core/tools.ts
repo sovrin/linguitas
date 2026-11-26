@@ -5,6 +5,7 @@ import type { DatabaseSync } from 'node:sqlite'
 import { z } from 'zod'
 import {
   audit,
+  changesetNameSchema,
   keySchema,
   localeSchema,
   parseText,
@@ -13,6 +14,13 @@ import {
   type TextKey,
 } from '#self/shared/contracts'
 import { tool } from '#nexitas/server/utils/mcp'
+import {
+  createChangeset,
+  getChangeset,
+  listChangesets,
+  saveChanges,
+  withChangeset,
+} from './changesets'
 import {
   addLocale,
   createKey,
@@ -30,6 +38,7 @@ const GLOSSARY = 40
 export const instructions = `linguitas holds this project's texts: keys (such as export.done) with a text per language, and a note on where the text appears.
 To port a site's strings: save_keys with the source language's texts and a note each, then translate for every other language and save_keys with what you wrote.
 Keep every {placeholder} exactly. A text that depends on a number is one ICU plural, never two keys: {count, plural, one {# bar} other {# bars}}; # is the number, and each language writes the forms it needs (translate names them).
+For a feature still in development, start a changeset (create_changeset, named like its branch) and pass it as \`changeset\` to every tool: changes wait there, apart from the draft, until the owner applies them as the feature goes live. A developer's build sees them with sync --changeset <name>.
 Nothing reaches a site until the owner publishes on the Translations page.`
 
 /** The project's tools, each bound to it. `changed` runs after a write, to tell open pages. */
@@ -45,6 +54,17 @@ export function translationTools(db: DatabaseSync, projectId: string, changed = 
     if (!space().locales.includes(locale))
       throw new Error(`The project has no language ${locale}. add_language adds it.`)
   }
+  const changeset = (name: string) => {
+    const found = getChangeset(db, projectId, name)
+    if (!found) throw new Error(`There is no changeset ${name}. create_changeset starts it.`)
+    return found
+  }
+  // What `run` reads with the changeset laid over the draft, when one is named.
+  const within = <T>(name: string | undefined, run: () => T) =>
+    name ? withChangeset(db, projectId, space(), changeset(name), run) : run()
+  const inChangeset = changesetNameSchema
+    .optional()
+    .describe('Work in this changeset: read the draft with it laid over, write into it')
 
   return [
     tool({
@@ -58,11 +78,14 @@ export function translationTools(db: DatabaseSync, projectId: string, changed = 
           .optional()
           .describe('Only keys starting with this, e.g. "help."'),
         locale: localeSchema.optional(),
+        changeset: inChangeset,
       }),
-      run: ({ prefix, locale }) => {
+      run: ({ prefix, locale, changeset: name }) => {
         if (locale) known(locale)
         const { source, locales, live } = space()
-        const keys = listKeys(db, projectId).filter((key) => !prefix || key.key.startsWith(prefix))
+        const keys = within(name, () => listKeys(db, projectId)).filter(
+          (key) => !prefix || key.key.startsWith(prefix),
+        )
         return {
           source,
           languages: locales.map((code) => ({ locale: code, live: live.includes(code) })),
@@ -80,9 +103,9 @@ export function translationTools(db: DatabaseSync, projectId: string, changed = 
     tool({
       name: 'get_key',
       description: 'One key: its note, its text in every language, and what the audit finds.',
-      input: z.object({ key: keySchema }),
-      run: ({ key }) => {
-        const found = getKey(db, projectId, key)
+      input: z.object({ key: keySchema, changeset: inChangeset }),
+      run: ({ key, changeset: name }) => {
+        const found = within(name, () => getKey(db, projectId, key))
         if (!found) throw new Error(`There is no key ${key}.`)
         return {
           key: found.key,
@@ -113,10 +136,24 @@ export function translationTools(db: DatabaseSync, projectId: string, changed = 
           )
           .min(1)
           .max(MAX_KEYS),
+        changeset: inChangeset,
       }),
-      run: ({ keys }) => {
+      run: ({ keys, changeset: name }) => {
         const { locales } = space()
         for (const { texts } of keys) for (const locale of Object.keys(texts)) known(locale)
+        if (name) {
+          // A key the draft has is updated, any other added; the changeset merges them in.
+          const changes = keys.map(({ key, note, texts }) =>
+            getKey(db, projectId, key)
+              ? { op: 'update' as const, key, note, texts, confirmed: [] }
+              : { op: 'add' as const, key, note, texts },
+          )
+          saveChanges(db, projectId, space(), changeset(name).name, changes)
+          changed()
+          return within(name, () =>
+            keys.map(({ key }) => ({ key, checks: checks(getKey(db, projectId, key)!, locales) })),
+          )
+        }
         const saved = keys.map(({ key, note, texts }) => {
           const before = getKey(db, projectId, key)
           const input = { note: note ?? before?.note ?? '', texts, confirmed: [] }
@@ -140,13 +177,14 @@ export function translationTools(db: DatabaseSync, projectId: string, changed = 
         locale: localeSchema,
         keys: z.array(keySchema).max(MAX_KEYS).optional(),
         prefix: z.string().max(120).optional(),
+        changeset: inChangeset,
       }),
-      run: ({ locale, keys: asked, prefix }) => {
+      run: ({ locale, keys: asked, prefix, changeset: name }) => {
         known(locale)
         const { source } = space()
         if (locale === source)
           throw new Error(`${locale} is the source language: write it, then translate from it.`)
-        const all = listKeys(db, projectId)
+        const all = within(name, () => listKeys(db, projectId))
         const wanted = all.filter((key) =>
           asked
             ? asked.includes(key.key)
@@ -203,11 +241,58 @@ export function translationTools(db: DatabaseSync, projectId: string, changed = 
     tool({
       name: 'delete_keys',
       description: `Deletes keys with their note and their texts in every language, up to ${MAX_KEYS} at a time; a deleted key cannot be brought back. Published versions keep their texts until the owner publishes again. For keys no code uses any more, such as two keys folded into one plural.`,
-      input: z.object({ keys: z.array(keySchema).min(1).max(MAX_KEYS) }),
-      run: ({ keys }) => {
+      input: z.object({ keys: z.array(keySchema).min(1).max(MAX_KEYS), changeset: inChangeset }),
+      run: ({ keys, changeset: name }) => {
+        if (name) {
+          saveChanges(
+            db,
+            projectId,
+            space(),
+            changeset(name).name,
+            keys.map((key) => ({ op: 'remove' as const, key })),
+          )
+          changed()
+          return { removing: keys, in: name }
+        }
         const deleted = keys.filter((key) => deleteKey(db, projectId, key))
         if (deleted.length) changed()
         return { deleted, notFound: keys.filter((key) => !deleted.includes(key)) }
+      },
+    }),
+    tool({
+      name: 'create_changeset',
+      description:
+        "Starts a changeset for a feature's key changes, named like its branch (feat/checkout). Pass it as `changeset` to save_keys, delete_keys, translate, list_keys and get_key; the owner applies it on the Translations page when the feature goes live.",
+      input: z.object({
+        name: changesetNameSchema,
+        note: z.string().trim().max(500).optional().describe('What the feature is'),
+      }),
+      run: ({ name, note }) => {
+        const created = createChangeset(db, projectId, name, note)
+        if (created) changed()
+        return { name, created }
+      },
+    }),
+    tool({
+      name: 'list_changesets',
+      description:
+        "The project's changesets, open ones first: how many changes each holds and how many wait to be applied. With `name`, that one's changes.",
+      input: z.object({ name: changesetNameSchema.optional() }),
+      run: ({ name }) => {
+        if (!name) return listChangesets(db, projectId)
+        const found = changeset(name)
+        return {
+          name: found.name,
+          note: found.note || undefined,
+          applied: !!found.appliedAt,
+          changes: found.changes.map((change) => ({
+            key: change.key,
+            op: change.op,
+            note: change.note ?? undefined,
+            texts: change.op === 'remove' ? undefined : change.texts,
+            applied: !!change.appliedAt,
+          })),
+        }
       },
     }),
   ]

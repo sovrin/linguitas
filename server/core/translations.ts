@@ -234,17 +234,27 @@ export function createKey(
   input: KeyInput,
   now = Date.now(),
 ) {
-  return transaction(db, () => {
-    const created =
-      db
-        .prepare(
-          `INSERT OR IGNORE INTO translation_keys (project_id, key, note, created_at, updated_at)
-          VALUES (?, ?, ?, ?, ?)`,
-        )
-        .run(projectId, key, input.note, now, now).changes === 1
-    if (created) writeTexts(db, projectId, locales, key, input.texts, input.confirmed, now)
-    return created
-  })
+  return transaction(db, () => insertKey(db, projectId, locales, key, input, now))
+}
+
+/** createKey's writes, for a caller that holds the transaction (applying a changeset). */
+export function insertKey(
+  db: DatabaseSync,
+  projectId: string,
+  locales: string[],
+  key: string,
+  input: KeyInput,
+  now = Date.now(),
+) {
+  const created =
+    db
+      .prepare(
+        `INSERT OR IGNORE INTO translation_keys (project_id, key, note, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?)`,
+      )
+      .run(projectId, key, input.note, now, now).changes === 1
+  if (created) writeTexts(db, projectId, locales, key, input.texts, input.confirmed, now)
+  return created
 }
 
 /** A key's new note and texts. Languages the input leaves out keep theirs. */
@@ -256,12 +266,22 @@ export function updateKey(
   input: KeyInput,
   now = Date.now(),
 ) {
-  transaction(db, () => {
-    db.prepare(
-      'UPDATE translation_keys SET note = ?, updated_at = ? WHERE project_id = ? AND key = ?',
-    ).run(input.note, now, projectId, key)
-    writeTexts(db, projectId, locales, key, input.texts, input.confirmed, now)
-  })
+  transaction(db, () => writeKey(db, projectId, locales, key, input, now))
+}
+
+/** updateKey's writes, for a caller that holds the transaction (applying a changeset). */
+export function writeKey(
+  db: DatabaseSync,
+  projectId: string,
+  locales: string[],
+  key: string,
+  input: KeyInput,
+  now = Date.now(),
+) {
+  db.prepare(
+    'UPDATE translation_keys SET note = ?, updated_at = ? WHERE project_id = ? AND key = ?',
+  ).run(input.note, now, projectId, key)
+  writeTexts(db, projectId, locales, key, input.texts, input.confirmed, now)
 }
 
 /** Deletes a key with its texts in every language. False when the project has no such key. */

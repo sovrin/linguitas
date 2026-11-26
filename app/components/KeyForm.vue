@@ -2,13 +2,15 @@
 import { CHECKS, audit, type TextKey } from '#self/shared/contracts'
 
 /** Writes a new key, or edits `textKey`: its note and a text per language, the source first. Each
- *  translation shows what the audit finds as it is typed, as the server will store it. */
+ *  translation shows what the audit finds as it is typed, as the server will store it. With
+ *  `changeset`, it writes the change into that changeset instead, and the draft stays as it is. */
 const props = defineProps<{
   projectId: string
   locales: string[]
   textKey?: TextKey
   /** A new key's name to start with: one a site's code asks for. */
   name?: string
+  changeset?: string
 }>()
 const emit = defineEmits<{ saved: [TextKey] }>()
 
@@ -55,6 +57,15 @@ function canConfirm(locale: string) {
 const { pending, error, issues, fieldError, submit } = useSubmit()
 
 async function save() {
+  if (props.changeset) {
+    const change = props.textKey
+      ? { op: 'update', key: name.value, note: note.value, texts, confirmed: confirmed.value }
+      : { op: 'add', key: name.value, note: note.value, texts }
+    const path = `/api/p/${props.projectId}/translations/changesets/${encodeURIComponent(props.changeset)}/changes`
+    const done = await submit(() => $fetch(path, { method: 'POST', body: { changes: [change] } }))
+    if (done) emit('saved', draft.value)
+    return
+  }
   const body = { note: note.value, texts, confirmed: confirmed.value }
   const base = `/api/p/${props.projectId}/translations/keys`
   const saved = await submit(() =>
@@ -142,7 +153,14 @@ async function save() {
     <FormIssues :error="error" :issues="issues" failed="Could not save the key." />
 
     <div class="cluster gap-3 hairline-t pt-5">
-      <p class="caption">An empty text removes it. Sites get changes with the next publish.</p>
+      <p class="caption">
+        An empty text removes it.
+        {{
+          changeset
+            ? 'The change waits in the changeset; the draft stays as it is.'
+            : 'Sites get changes with the next publish.'
+        }}
+      </p>
       <button
         type="submit"
         class="btn end"

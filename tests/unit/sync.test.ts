@@ -74,6 +74,9 @@ function other(t: (key: string) => string) {
     expect(check(uses.slice(0, 1), [{ at: 'z.ts:4', why: 'w' }], new Set(['a']))).toEqual([
       'z.ts:4: w',
     ])
+    expect(check(uses, [], new Set(['a', 'b']), new Set(), { c: ['feat/checkout'] })).toEqual([
+      "x.ts:3: 'c' is in changeset feat/checkout. Apply and publish it in linguitas.",
+    ])
   })
 })
 
@@ -118,6 +121,10 @@ describe('client', () => {
     })
     expect(mode({ draft: true }, false).error).toMatch(/LINGUITAS_URL/)
     expect(mode({ ...named, token: 'lt_x', draft: true }, true).error).toMatch(/development/)
+    expect(mode({ ...named, token: 'lt_x', changeset: 'feat/x' }, true).error).toMatch(
+      /--changeset is for development/,
+    )
+    expect(mode({ changeset: 'feat/x' }, false).error).toMatch(/--changeset needs/)
   })
 
   it('chooses the plural form for the count, by the language of the text it found', () => {

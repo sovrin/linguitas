@@ -6,10 +6,12 @@
 //     node scripts/linguitas.mjs --consumer web
 //
 // 1. Scans the code for t('…'): every key a literal, so the build knows each key it uses.
-// 2. Fetches the published texts (or the draft, --draft), their key types and the client into
-//    --out, to be committed: when linguitas cannot be reached, the build goes on with those.
+// 2. Fetches the published texts (or the draft, --draft, with a feature's changeset laid over it,
+//    --changeset <name>), their key types and the client into --out, to be committed: when
+//    linguitas cannot be reached, the build goes on with those.
 // 3. Fails on a key that is not a literal, one that does not exist, and (without --draft) one
-//    that exists only as a draft: a site never ships asking for a text nobody published.
+//    that exists only as a draft or in a changeset: a site never ships asking for a text nobody
+//    published.
 // 4. In CI, with the token, reports the keys it found, so linguitas knows what no code uses and
 //    what code asks for in vain.
 //
@@ -24,7 +26,7 @@ import { extname, join, relative, resolve } from 'node:path'
 import { parseArgs } from 'node:util'
 import { pathToFileURL } from 'node:url'
 
-export const VERSION = 1
+export const VERSION = 2
 
 const KEY = /^[A-Za-z0-9][A-Za-z0-9_-]*(?:\.[A-Za-z0-9_-]+)*$/
 const SCRIPTS = new Set(['.ts', '.mts', '.js', '.mjs', '.tsx', '.jsx'])
@@ -211,17 +213,21 @@ export async function listFiles(dirs, skip) {
 // ── Checking
 
 /** What fails the build: violations, keys without a text in the source language, and keys that
- *  have one only in the draft. */
-export function check(uses, violations, known, draft) {
+ *  have one only in the draft, or only in a changeset (`pending`: key to the changesets adding
+ *  it). */
+export function check(uses, violations, known, draft, pending = {}) {
   const problems = violations.map((v) => `${v.at}: ${v.why}`)
   const seen = new Set()
   for (const use of uses) {
     if (known.has(use.key) || seen.has(use.key)) continue
     seen.add(use.key)
+    const changesets = pending[use.key]
     problems.push(
       draft?.has(use.key)
         ? `${use.at}: '${use.key}' exists only as a draft. Publish it in linguitas.`
-        : `${use.at}: '${use.key}' does not exist. Create it in linguitas.`,
+        : changesets?.length
+          ? `${use.at}: '${use.key}' is in changeset ${changesets.join(', ')}. Apply and publish it in linguitas.`
+          : `${use.at}: '${use.key}' does not exist. Create it in linguitas.`,
     )
   }
   return problems
@@ -241,8 +247,9 @@ async function request(url, token, init = {}) {
   return response
 }
 
-/** The texts, key types and client to write: the published version, or the draft. */
-async function fetchAll(served, api, token, draft) {
+/** The texts, key types and client to write: the published version, or the draft with a
+ *  changeset over it, if one is named. */
+async function fetchAll(served, api, token, draft, changeset) {
   const manifest = await (await request(api, null)).json()
   const client = await Promise.all(
     // Nuxt leaves .d.ts files out of what it serves, so the types travel as .d.ts.txt.
@@ -251,8 +258,10 @@ async function fetchAll(served, api, token, draft) {
     ),
   )
   if (draft) {
-    const texts = await (await request(`${api}/draft`, token)).json()
-    const keys = await (await request(`${api}/draft/keys.d.ts`, token)).text()
+    const query = changeset ? `?changeset=${encodeURIComponent(changeset)}` : ''
+    const texts = await (await request(`${api}/draft${query}`, token)).json()
+    delete texts.changesets
+    const keys = await (await request(`${api}/draft/keys.d.ts${query}`, token)).text()
     return { manifest, texts, keys, client }
   }
   const version = manifest.version
@@ -277,13 +286,14 @@ async function fetchAll(served, api, token, draft) {
 
 /** What sync does with what it was given: fetch when linguitas is named, else check against the
  *  committed texts; report in CI when it has the token and a consumer. */
-export function mode({ url, project, token, consumer, draft }, ci) {
+export function mode({ url, project, token, consumer, draft, changeset }, ci) {
   const online = !!(url && project)
-  if (draft && ci) return { error: '--draft is for development: CI builds what was published.' }
-  if (draft && !(online && token))
+  const flag = changeset ? '--changeset' : '--draft'
+  if ((draft || changeset) && ci)
+    return { error: `${flag} is for development: CI builds what was published.` }
+  if ((draft || changeset) && !(online && token))
     return {
-      error:
-        '--draft needs linguitas and the build token: LINGUITAS_URL, LINGUITAS_PROJECT and LINGUITAS_TOKEN.',
+      error: `${flag} needs linguitas and the build token: LINGUITAS_URL, LINGUITAS_PROJECT and LINGUITAS_TOKEN.`,
     }
   return { online, report: ci && online && !!token && !!consumer }
 }
@@ -299,8 +309,11 @@ async function main() {
       out: { type: 'string', default: 'app/linguitas' },
       from: { type: 'string', default: 'linguitas/client' },
       draft: { type: 'boolean', default: false },
+      changeset: { type: 'string', default: process.env.LINGUITAS_CHANGESET },
     },
   })
+  // A changeset is laid over the draft.
+  if (values.changeset) values.draft = true
   const ci = !!process.env.CI
   const { error, online, report } = mode(values, ci)
   if (error) return fail([error])
@@ -332,7 +345,7 @@ async function main() {
   let version
   try {
     if (!online) throw new Error('no LINGUITAS_URL and LINGUITAS_PROJECT')
-    const fetched = await fetchAll(served, api, values.token, values.draft)
+    const fetched = await fetchAll(served, api, values.token, values.draft, values.changeset)
     await mkdir(out, { recursive: true })
     await writeFile(join(out, 'texts.json'), `${JSON.stringify(fetched.texts, null, 2)}\n`)
     await writeFile(join(out, 'keys.d.ts'), fetched.keys)
@@ -345,7 +358,7 @@ async function main() {
         `linguitas: a newer sync script is out. curl -o ${relative(root, process.argv[1])} ${served}/sync.mjs`,
       )
     console.log(
-      `linguitas: ${values.draft ? 'the draft' : `version ${version}`}, ${Object.keys(texts.texts).join(', ') || 'no language'}`,
+      `linguitas: ${values.changeset ? `the draft with ${values.changeset}` : values.draft ? 'the draft' : `version ${version}`}, ${Object.keys(texts.texts).join(', ') || 'no language'}`,
     )
   } catch (error) {
     const why = online ? `could not fetch (${error.message})` : error.message
@@ -362,14 +375,16 @@ async function main() {
   // 3. Check: a key exists when the source language has a text for it.
   const known = new Set(Object.keys(texts.texts[texts.source] ?? {}))
   let drafted
+  let pending
   if (online && !values.draft && values.token && uses.some((u) => !known.has(u.key)))
-    drafted = await request(`${api}/draft`, values.token)
+    await request(`${api}/draft`, values.token)
       .then(async (r) => {
         const draft = await r.json()
-        return new Set(Object.keys(draft.texts[draft.source] ?? {}))
+        drafted = new Set(Object.keys(draft.texts[draft.source] ?? {}))
+        pending = draft.changesets
       })
       .catch(() => undefined)
-  const problems = check(uses, violations, known, drafted)
+  const problems = check(uses, violations, known, drafted, pending)
 
   // 4. Report, in CI only: a branch on a laptop never rewrites what a site uses.
   if (report) {

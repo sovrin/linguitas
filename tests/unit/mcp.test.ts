@@ -80,6 +80,8 @@ describe('mcp', () => {
       'translate',
       'add_language',
       'delete_keys',
+      'create_changeset',
+      'list_changesets',
     ])
     expect(listed.result.tools.every((tool) => tool.inputSchema.type === 'object')).toBe(true)
     expect(answerMessage({ jsonrpc: '2.0', method: 'notifications/initialized' }, mcp)).toBeNull()
@@ -184,6 +186,51 @@ describe('mcp', () => {
     expect(getKey(db, 'sonotas', 'keep')).not.toBeNull()
     expect(changes()).toBe(2)
     expect(call('delete_keys', { keys: [] }).error).toBeDefined()
+  })
+
+  it('works in a changeset, apart from the draft', () => {
+    const db = database()
+    const { call } = server(db)
+    call('save_keys', { keys: [{ key: 'pay', texts: { en: 'Pay', de: 'Bezahlen' } }] })
+    expect(
+      call('save_keys', { keys: [{ key: 'x', texts: {} }], changeset: 'feat/x' }).error,
+    ).toMatch(/create_changeset/)
+    expect(call('create_changeset', { name: 'feat/x' })).toEqual({ name: 'feat/x', created: true })
+    call('save_keys', {
+      changeset: 'feat/x',
+      keys: [
+        { key: 'checkout.title', note: 'Page title', texts: { en: 'Checkout' } },
+        { key: 'pay', texts: { en: 'Pay now' } },
+      ],
+    })
+    // Translating in the changeset sees its keys and its new source.
+    const todo = call('translate', { locale: 'de', changeset: 'feat/x' })
+    expect(todo.keys.map((k: { key: string; source: string }) => [k.key, k.source])).toEqual([
+      ['checkout.title', 'Checkout'],
+      ['pay', 'Pay now'],
+    ])
+    call('save_keys', {
+      changeset: 'feat/x',
+      keys: [{ key: 'checkout.title', texts: { de: 'Kasse' } }],
+    })
+    call('delete_keys', { changeset: 'feat/x', keys: ['pay'] })
+    expect(call('list_changesets', { name: 'feat/x' }).changes).toEqual([
+      {
+        key: 'checkout.title',
+        op: 'add',
+        note: 'Page title',
+        texts: { en: 'Checkout', de: 'Kasse' },
+        applied: false,
+      },
+      { key: 'pay', op: 'remove', applied: false },
+    ])
+    expect(call('get_key', { key: 'checkout.title', changeset: 'feat/x' }).texts).toEqual({
+      en: 'Checkout',
+      de: 'Kasse',
+    })
+    // The draft has none of it.
+    expect(getKey(db, 'sonotas', 'checkout.title')).toBeNull()
+    expect(call('list_keys', {}).keys.map((k: { key: string }) => k.key)).toEqual(['pay'])
   })
 
   it('has no token until the owner turns access on, and a new one each time', () => {

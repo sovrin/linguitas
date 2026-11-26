@@ -70,6 +70,24 @@ export const linguitas: NexitasModule = {
     // An assistant may edit the texts over MCP once the owner gives it a token of its own: the
     // build token sits in CI, and must never write.
     `ALTER TABLE translation_projects ADD COLUMN mcp_token TEXT;`,
+    // A changeset holds the key changes a feature needs, one per key, apart from the draft until
+    // the owner applies them. A change keeps the key as the draft had it when written (base), to
+    // tell a conflict; applied ones stay as the changeset's history.
+    `CREATE TABLE translation_changesets (
+      project_id TEXT NOT NULL REFERENCES translation_projects(project_id) ON DELETE CASCADE,
+      name TEXT NOT NULL, note TEXT NOT NULL DEFAULT '', created_at INTEGER NOT NULL,
+      applied_at INTEGER,
+      PRIMARY KEY (project_id, name)
+    ) WITHOUT ROWID;
+    CREATE TABLE translation_changeset_ops (
+      project_id TEXT NOT NULL, changeset TEXT NOT NULL, key TEXT NOT NULL,
+      op TEXT NOT NULL CHECK (op IN ('add', 'update', 'remove')), note TEXT,
+      texts TEXT NOT NULL DEFAULT '{}', confirmed TEXT NOT NULL DEFAULT '[]', base TEXT,
+      applied_at INTEGER, updated_at INTEGER NOT NULL,
+      PRIMARY KEY (project_id, changeset, key),
+      FOREIGN KEY (project_id, changeset)
+        REFERENCES translation_changesets(project_id, name) ON DELETE CASCADE
+    ) WITHOUT ROWID;`,
   ],
   publicRoutes: [
     // An assistant's MCP client (Claude Code, an editor), never a page: it sends no Origin, and
