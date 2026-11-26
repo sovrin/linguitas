@@ -18,12 +18,18 @@ export interface KeyNode {
  *  not a staircase. */
 export function keyTree(keys: readonly TextKey[]): KeyNode[] {
   const root: KeyNode = { path: '', label: '', children: [] }
+  // By path, so a level with thousands of keys is not searched once per key.
+  const byPath = new Map<string, KeyNode>()
   for (const key of keys) {
     let node = root
     for (const segment of key.key.split('.')) {
       const path = node.path ? `${node.path}.${segment}` : segment
-      let child = node.children.find((candidate) => candidate.path === path)
-      if (!child) node.children.push((child = { path, label: segment, children: [] }))
+      let child = byPath.get(path)
+      if (!child) {
+        child = { path, label: segment, children: [] }
+        node.children.push(child)
+        byPath.set(path, child)
+      }
       node = child
     }
     node.key = key
