@@ -1,7 +1,7 @@
 import { announceChange } from '#nexitas/server/utils/changes'
 import { nexitasDatabase } from '#nexitas/server/utils/nexitas'
-import { setSource } from '../../../../../../core/translations'
-import { routeLocale, translationSpace } from '../../../../../../utils/linguitas'
+import { setSource } from '#self/server/core/translations'
+import { routeLocale, translationSpace } from '#self/server/utils/linguitas'
 
 /** Makes a live language the source every other one is translated from. */
 export default defineEventHandler((event) => {

@@ -2,9 +2,9 @@ import { createLimiter } from '#nexitas/server/core/limits'
 import { announceChange } from '#nexitas/server/utils/changes'
 import { invalid } from '#nexitas/server/utils/invalid'
 import { nexitasDatabase } from '#nexitas/server/utils/nexitas'
-import { reportSchema } from '../../../../../shared/contracts'
-import { listConsumers, MAX_CONSUMERS, saveReport } from '../../../../core/usage'
-import { requireTranslationToken } from '../../../../utils/linguitas'
+import { reportSchema } from '#self/shared/contracts'
+import { listConsumers, MAX_CONSUMERS, saveReport } from '#self/server/core/usage'
+import { requireTranslationToken } from '#self/server/utils/linguitas'
 
 // A build reports once per CI run; this keeps a leaked token from flooding the database.
 const perProject = createLimiter(60, 60 * 60 * 1000)

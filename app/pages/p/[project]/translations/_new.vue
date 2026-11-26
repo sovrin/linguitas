@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { TextKey, TranslationSpace } from '../../../../../shared/contracts'
+import type { TextKey, TranslationSpace } from '#self/shared/contracts'
 
 const project = useProject().id.value
 // Not live: the page is a form, and its fields should not shift while it is typed in.

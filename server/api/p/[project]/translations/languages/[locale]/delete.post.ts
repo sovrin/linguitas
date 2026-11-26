@@ -1,7 +1,7 @@
 import { announceChange } from '#nexitas/server/utils/changes'
 import { nexitasDatabase } from '#nexitas/server/utils/nexitas'
-import { removeLocale } from '../../../../../../core/translations'
-import { routeLocale, translationSpace } from '../../../../../../utils/linguitas'
+import { removeLocale } from '#self/server/core/translations'
+import { routeLocale, translationSpace } from '#self/server/utils/linguitas'
 
 /** Takes a draft language out; its texts stay until it is added again. A live one has to be taken
  *  offline first, so no site loses a language in one step. */

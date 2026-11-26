@@ -1,6 +1,6 @@
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { SYNC_VERSION } from '../../shared/contracts'
+import { SYNC_VERSION } from '#self/shared/contracts'
 // The served files are plain JavaScript; the tests run them as sites do.
 import * as client from '../../public/v1/translations/client.js'
 import {

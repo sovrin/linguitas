@@ -3,7 +3,7 @@
 // never do.
 import type { DatabaseSync } from 'node:sqlite'
 import { transaction } from '#nexitas/server/core/database'
-import type { Consumer, Report } from '../../shared/contracts'
+import type { Consumer, Report } from '#self/shared/contracts'
 
 /** How many consumers a project keeps: the report route is open to anyone with the build token,
  *  so a leaked one cannot fill the database with names. */

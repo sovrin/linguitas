@@ -1,8 +1,8 @@
 import { getProject } from '#nexitas/server/core/projects'
 import { nexitasDatabase } from '#nexitas/server/utils/nexitas'
-import { SYNC_VERSION } from '../../../../../shared/contracts'
-import { getManifest } from '../../../../core/translations'
-import { answerCached } from '../../../../utils/linguitas'
+import { SYNC_VERSION } from '#self/shared/contracts'
+import { getManifest } from '#self/server/core/translations'
+import { answerCached } from '#self/server/utils/linguitas'
 
 /** The project, the languages it delivers and which version they come from. Sites check it for a
  *  new version: unchanged, it is a 304. `sync` is the current sync script's version. */

@@ -1,10 +1,6 @@
 <script setup lang="ts">
 import { plural } from '#nexitas/app/lib/format'
-import {
-  localeOfFileName,
-  type ImportPreview,
-  type TranslationSpace,
-} from '../../../../../shared/contracts'
+import { localeOfFileName, type ImportPreview, type TranslationSpace } from '#self/shared/contracts'
 
 // Files into the project, in two steps: read them and see what would change, row by row, then
 // write only what was picked. A linguitas file (Export) brings every language and each key's

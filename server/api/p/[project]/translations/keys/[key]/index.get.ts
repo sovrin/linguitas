@@ -1,8 +1,8 @@
 import { nexitasDatabase } from '#nexitas/server/utils/nexitas'
-import { isKey } from '../../../../../../../shared/contracts'
-import { getKey } from '../../../../../../core/translations'
-import { listConsumers, listUsage } from '../../../../../../core/usage'
-import { translationSpace } from '../../../../../../utils/linguitas'
+import { isKey } from '#self/shared/contracts'
+import { getKey } from '#self/server/core/translations'
+import { listConsumers, listUsage } from '#self/server/core/usage'
+import { translationSpace } from '#self/server/utils/linguitas'
 
 /** A key with its texts, and the sites whose code uses it: null until a site has reported. A
  *  valid name that is no key yet (a node in between, checkout.form) answers with `key: null`, so

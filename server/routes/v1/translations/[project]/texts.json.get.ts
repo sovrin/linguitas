@@ -1,6 +1,6 @@
 import { nexitasDatabase } from '#nexitas/server/utils/nexitas'
-import { getManifest, getVersionTexts } from '../../../../core/translations'
-import { answerCached } from '../../../../utils/linguitas'
+import { getManifest, getVersionTexts } from '#self/server/core/translations'
+import { answerCached } from '#self/server/utils/linguitas'
 
 /** Every published language of the current version in one file, as a site commits it and its
  *  client reads it: `{ version, source, texts: { [locale]: { [key]: text } } }`. A site that

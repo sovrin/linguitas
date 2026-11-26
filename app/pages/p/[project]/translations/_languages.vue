@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { TranslationSpace } from '../../../../../shared/contracts'
+import type { TranslationSpace } from '#self/shared/contracts'
 
 // The project's languages, one step at a time: a new one starts as a draft, a live one has to go
 // offline before it can be removed, and the source changes on its own. Sites see none of it until

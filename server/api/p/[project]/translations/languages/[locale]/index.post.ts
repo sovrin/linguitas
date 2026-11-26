@@ -1,9 +1,9 @@
 import { announceChange } from '#nexitas/server/utils/changes'
 import { invalid } from '#nexitas/server/utils/invalid'
 import { nexitasDatabase } from '#nexitas/server/utils/nexitas'
-import { liveSchema } from '../../../../../../../shared/contracts'
-import { setLive } from '../../../../../../core/translations'
-import { routeLocale, translationSpace } from '../../../../../../utils/linguitas'
+import { liveSchema } from '#self/shared/contracts'
+import { setLive } from '#self/server/core/translations'
+import { routeLocale, translationSpace } from '#self/server/utils/linguitas'
 
 /** Puts a language live, or takes it offline, from the next publish on. */
 export default defineEventHandler(async (event) => {

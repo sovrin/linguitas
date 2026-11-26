@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { errorMessage, formatTime } from '#nexitas/app/lib/format'
-import type { TextKey } from '../../../../../shared/contracts'
-import KeyTree from '../../../../components/KeyTree.vue'
+import type { TextKey } from '#self/shared/contracts'
+import KeyTree from '#self/app/components/KeyTree.vue'
 
 // One key, opened beside the tree it sits in: its texts in every language stacked in the
 // inspector, any number of them, and deleting it at the inspector's foot. A node in between that

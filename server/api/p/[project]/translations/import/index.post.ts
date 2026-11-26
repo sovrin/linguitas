@@ -1,9 +1,9 @@
 import { announceChange } from '#nexitas/server/utils/changes'
 import { invalid } from '#nexitas/server/utils/invalid'
 import { nexitasDatabase } from '#nexitas/server/utils/nexitas'
-import { importApplySchema } from '../../../../../../shared/contracts'
-import { applyImport } from '../../../../../core/translations'
-import { translationSpace } from '../../../../../utils/linguitas'
+import { importApplySchema } from '#self/shared/contracts'
+import { applyImport } from '#self/server/core/translations'
+import { translationSpace } from '#self/server/utils/linguitas'
 
 /** Writes what the owner picked from a preview: keys, notes and texts, in one transaction. */
 export default defineEventHandler(async (event) => {

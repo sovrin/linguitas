@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import type { DatabaseSync } from 'node:sqlite'
 import { afterEach, describe, expect, it } from 'vitest'
 import { openDatabase } from '#nexitas/server/core/database'
-import { filterKeys, keyTree, keysUnder, treeRows } from '../../shared/tree'
+import { filterKeys, keyTree, keysUnder, treeRows } from '#self/shared/tree'
 import { createProject, deleteProject } from '#nexitas/server/core/projects'
 import {
   audit,
@@ -18,7 +18,7 @@ import {
   placeholders,
   pluralForms,
   readImportFile,
-} from '../../shared/contracts'
+} from '#self/shared/contracts'
 import {
   addLocale,
   createKey,
@@ -35,8 +35,8 @@ import {
   setLive,
   setSource,
   updateKey,
-} from '../../server/core/translations'
-import { linguitas } from '../../server/core/module'
+} from '#self/server/core/translations'
+import { linguitas } from '#self/server/core/module'
 
 const dirs: string[] = []
 const dbs: DatabaseSync[] = []

@@ -1,9 +1,9 @@
 import { nexitasDatabase } from '#nexitas/server/utils/nexitas'
-import { CHECKS } from '../../../../../shared/contracts'
-import { filterKeys, treeRows, type Filter } from '../../../../../shared/tree'
-import { listKeys } from '../../../../core/translations'
-import { listUsage } from '../../../../core/usage'
-import { translationSpace } from '../../../../utils/linguitas'
+import { CHECKS } from '#self/shared/contracts'
+import { filterKeys, treeRows, type Filter } from '#self/shared/tree'
+import { listKeys } from '#self/server/core/translations'
+import { listUsage } from '#self/server/core/usage'
+import { translationSpace } from '#self/server/utils/linguitas'
 
 /** The key tree's top level and the children of each `open` node, nothing deeper: the page draws
  *  only what is unfolded. `check` and `q` narrow the keys first, as the page's filters. */

@@ -14,7 +14,7 @@ import {
   type Text,
   type TextKey,
   type TransferFile,
-} from '../../shared/contracts'
+} from '#self/shared/contracts'
 
 // ── A project's translations
 

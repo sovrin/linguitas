@@ -1,4 +1,4 @@
-import { placeholders } from '../../shared/contracts'
+import { placeholders } from '#self/shared/contracts'
 
 /** keys.d.ts for a site: every key of `source` (one language's texts by key) with the placeholders
  *  its text has. It extends the `Keys` of the client beside it, so `t()` takes only these keys,

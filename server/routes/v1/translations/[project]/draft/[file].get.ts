@@ -1,7 +1,7 @@
 import { nexitasDatabase } from '#nexitas/server/utils/nexitas'
-import { keysDeclaration } from '../../../../../core/declarations'
-import { snapshot } from '../../../../../core/translations'
-import { requireTranslationToken } from '../../../../../utils/linguitas'
+import { keysDeclaration } from '#self/server/core/declarations'
+import { snapshot } from '#self/server/core/translations'
+import { requireTranslationToken } from '#self/server/utils/linguitas'
 
 /** The draft's files, as they are now, for a developer's build, with the build token: its keys
  *  typed for a site's `t()` (keys.d.ts), or every language in one file (texts.json). Its own

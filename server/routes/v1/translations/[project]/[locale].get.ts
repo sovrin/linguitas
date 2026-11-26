@@ -1,7 +1,7 @@
 import { nexitasDatabase } from '#nexitas/server/utils/nexitas'
-import { LOCALE } from '../../../../../shared/contracts'
-import { getManifest, getVersionTexts } from '../../../../core/translations'
-import { answerCached } from '../../../../utils/linguitas'
+import { LOCALE } from '#self/shared/contracts'
+import { getManifest, getVersionTexts } from '#self/server/core/translations'
+import { answerCached } from '#self/server/utils/linguitas'
 
 /** One language's texts of the current version, by key. A language that was not published is a
  *  404. A site that caches should read the version's own file (`/<version>/<locale>.json`). */
