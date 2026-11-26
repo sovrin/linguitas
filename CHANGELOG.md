@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.1.1](https://github.com/sovrin/linguitas/compare/v0.1.0...v0.1.1) (2026-11-26)
+
+
+### Features
+
+* **changesets:** hold a feature's key changes apart from the draft ([ad3325a](https://github.com/sovrin/linguitas/commit/ad3325adb32d9ff67fb3418b4a833700693429a2))
+* **changesets:** hold a feature's key changes apart from the draft ([8ccca92](https://github.com/sovrin/linguitas/commit/8ccca92102120d6066f6e89f3a2f339ae1112469))
+
+
+### Performance Improvements
+
+* audit each text once per refresh ([1b443d4](https://github.com/sovrin/linguitas/commit/1b443d4ec147460a9b2d6abbe28d50c8d414642b))
+* audit each text once per refresh ([90b092c](https://github.com/sovrin/linguitas/commit/90b092c0256c7f46e7919afecfa6b70f48ca3636))
+
 ## 0.1.0 (2026-11-03)
 
 
