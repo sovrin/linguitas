@@ -236,12 +236,19 @@ export const placeholders = (text: string) => parseText(text).names
 /** The plural forms a language tells apart, as ICU names them: en one, other; pl one, few,
  *  many, other. */
 export function pluralForms(locale: string) {
-  try {
-    return new Intl.PluralRules(locale).resolvedOptions().pluralCategories as string[]
-  } catch {
-    return ['other']
+  let forms = pluralCache.get(locale)
+  if (!forms) {
+    try {
+      forms = new Intl.PluralRules(locale).resolvedOptions().pluralCategories as string[]
+    } catch {
+      forms = ['other']
+    }
+    pluralCache.set(locale, forms)
   }
+  return forms
 }
+// The audit asks for every text; making a PluralRules each time was most of its cost.
+const pluralCache = new Map<string, string[]>()
 
 /** Whether a text's plurals lack a form its language needs, or do not read. */
 export function lacksForms(text: string, locale: string) {

@@ -2,7 +2,7 @@ import { nexitasDatabase } from '#nexitas/server/utils/nexitas'
 import {
   CHECKS,
   audit,
-  countProblems,
+  isProblem,
   type Check,
   type TranslationSpace,
 } from '../../../../../shared/contracts'
@@ -18,14 +18,22 @@ export default defineEventHandler((event): TranslationSpace => {
   const keys = listKeys(db, project.id)
   const usage = listUsage(db, project.id)
   const known = new Set(keys.map((key) => key.key))
+  // One audit per key and language, every count from it: the page refreshes on every change.
   const checks = Object.fromEntries(
-    (Object.keys(CHECKS) as Check[]).map((check) => [
-      check,
-      keys.filter((key) =>
-        space.locales.some((locale) => audit(key, locale, space.source).includes(check)),
-      ).length,
-    ]),
+    (Object.keys(CHECKS) as Check[]).map((check) => [check, 0]),
   ) as Record<Check, number>
+  let problems = 0
+  for (const key of keys) {
+    const found = new Set<Check>()
+    let problem = false
+    for (const locale of space.locales) {
+      const own = audit(key, locale, space.source)
+      for (const check of own) found.add(check)
+      if (!problem && space.live.includes(locale) && own.some(isProblem)) problem = true
+    }
+    for (const check of found) if (check in checks) checks[check]++
+    if (problem) problems++
+  }
   return {
     token: space.token,
     mcpToken: space.mcpToken,
@@ -38,7 +46,7 @@ export default defineEventHandler((event): TranslationSpace => {
       space.locales.map((locale) => [locale, keys.filter((key) => key.texts[locale]).length]),
     ),
     checks,
-    problems: countProblems(keys, space.live),
+    problems,
     unused: keys.filter((key) => !usage[key.key]).length,
     asked: Object.entries(usage)
       .filter(([key]) => !known.has(key))
