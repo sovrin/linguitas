@@ -302,9 +302,108 @@ export function flatten(strings: Record<string, unknown>, prefix = '', depth = 0
   return { strings: out, skipped }
 }
 
+/** A changeset is named like the branch its feature is built on: feat/checkout, fix-typo. */
+export const changesetNameSchema = z
+  .string()
+  .max(80)
+  .regex(
+    /^[A-Za-z0-9][A-Za-z0-9._-]*(?:\/[A-Za-z0-9._-]+)*$/,
+    'Use letters, digits, ., _ and -, in parts joined by /, like a branch.',
+  )
+
+/** A changeset to start: its name, and what the feature is. */
+export const newChangesetSchema = z
+  .object({ name: changesetNameSchema, note: z.string().trim().max(500).default('') })
+  .strict()
+
+const textsSchema = z.record(localeSchema, z.string().max(10_000)).default({})
+
+/** One change a changeset holds for a key, as a work order: add it, update its note and texts
+ *  (the languages left out keep theirs; an empty text removes one), or remove it. */
+export const changeSchema = z.discriminatedUnion('op', [
+  z
+    .object({
+      op: z.literal('add'),
+      key: keySchema,
+      note: z.string().trim().max(500).optional(),
+      texts: textsSchema,
+    })
+    .strict(),
+  z
+    .object({
+      op: z.literal('update'),
+      key: keySchema,
+      note: z.string().trim().max(500).optional(),
+      texts: textsSchema,
+      confirmed: z.array(localeSchema).max(50).default([]),
+    })
+    .strict(),
+  z.object({ op: z.literal('remove'), key: keySchema }).strict(),
+])
+export type ChangeInput = z.infer<typeof changeSchema>
+export const changesSchema = z.object({ changes: z.array(changeSchema).min(1).max(200) }).strict()
+
+/** Applying a changeset: `removeUsed` removes keys a site's code still uses, too. */
+export const applySchema = z.object({ removeUsed: z.boolean().default(false) }).strict()
+
+export type Op = 'add' | 'update' | 'remove'
+
+/** A change as a changeset keeps it. */
+export interface Change {
+  key: string
+  op: Op
+  /** The new note; null keeps the key's. */
+  note: string | null
+  texts: Record<string, string>
+  confirmed: string[]
+  /** An update's key as the draft had it when the change was written, to tell what changed in
+   *  the draft since. */
+  base: { note: string; texts: Record<string, string> } | null
+  appliedAt: number | null
+  updatedAt: number
+}
+
+export interface Changeset {
+  name: string
+  note: string
+  createdAt: number
+  /** When its last change was applied; null while it is open. */
+  appliedAt: number | null
+  changes: Change[]
+}
+
+/** A changeset in a list: how many changes it holds, and how many wait to be applied. */
+export interface ChangesetSummary {
+  name: string
+  note: string
+  createdAt: number
+  appliedAt: number | null
+  changes: number
+  pending: number
+}
+
+/** What stops a changeset from being applied, by key. */
+export interface Conflict {
+  key: string
+  why: string
+}
+
+/** A changeset as its page shows it: its changes, the keys they touch as they are now (`before`)
+ *  and as applying would leave them (`after`), what conflicts with the draft, and the removals
+ *  held back because sites' code still uses the keys. */
+export interface ChangesetView {
+  changeset: Changeset
+  source: string
+  locales: string[]
+  before: Record<string, TextKey | null>
+  after: Record<string, TextKey | null>
+  conflicts: Conflict[]
+  held: { key: string; consumers: string[] }[]
+}
+
 /** The sync script's version. linguitas serves the script and names this version in its
  *  manifest, so a site's copy can tell it is old; the script sends its own with a report. */
-export const SYNC_VERSION = 1
+export const SYNC_VERSION = 2
 
 /** What a site's build reports: who it is, the version it built with, and every key its code
  *  uses. Keys that do not exist are welcome: they are what the code asks for in vain. */

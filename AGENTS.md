@@ -28,6 +28,9 @@ Conventions for working on linguitas, in code and in the interface.
   Schema changes are a new step in `migrations` in `server/core/module.ts`; never edit a released
   step.
 - Keys are addresses: once saved they never change.
+- A changeset (`server/core/changesets.ts`) holds a feature's key changes apart from the draft until
+  applied. Its preview is apply itself, in a savepoint that is rolled back (`withChangeset`), so
+  the two never drift; writes it shares with the draft go through `insertKey` and `writeKey`.
 - No language change reaches sites in one step: a new language is a draft until put live, a live
   one goes offline before it can be removed, and every change waits for the next publish. A
   removed language keeps its texts. The server enforces this, not only the Languages page.

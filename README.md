@@ -31,6 +31,8 @@ owner         ── /p/<project>/translations                 keys × languages
   until it is added again. The source is always live, and changes only on its own.
 - **Publishing** freezes the texts as they are. Sites get that version until the next publish, so
   work in progress never reaches them.
+- **Changesets** hold the key changes a feature needs while it is built, apart from the draft:
+  add a key, update its note and texts, remove it. See [Changesets](#changesets).
 
 ### The audit
 
@@ -100,14 +102,16 @@ way the build knows every key a site uses.
    against them, so a site builds without linguitas.
 
 3. **Fails** on a key that is not a literal, a key that does not exist, and a key that exists only
-   as a draft ("publish it"). A site never ships asking for a text nobody published.
+   as a draft ("publish it") or in a changeset ("apply and publish it"). A site never ships asking
+   for a text nobody published.
 4. **Reports**, in CI only (`CI` set) and only with the build token and `--consumer`, the keys it
    found; a CI without them builds and says it did not report. The
    Translations page then shows what no site uses ("Not in code") and what a site asks for that
    does not exist, with "Create key".
 
 `--draft` (with the build token, refused in CI) fetches the texts as they are now, so a key works
-in development before it is published.
+in development before it is published. `--changeset <name>` (or `LINGUITAS_CHANGESET`) fetches the
+draft with that changeset laid over it, so a feature branch sees its own keys and nobody else's.
 
 **The client** works from the build's texts: `t()` works at once, offline, and whether linguitas
 is up or not. Published texts reach a site with its next build. It fetches, keeps and reports
@@ -149,14 +153,37 @@ is ignored. While Translations is switched off, every route answers `404`.
 
 The build token, sent as `Authorization: Bearer`, is for builds only:
 
-| Request                                 | Does                                                             |
-| --------------------------------------- | ---------------------------------------------------------------- |
-| `GET /v1/translations/:project/draft`   | `{ version, source, texts }`, every language as it is now        |
-| `GET …/:project/draft/keys.d.ts`        | the draft's keys, typed                                          |
-| `POST /v1/translations/:project/report` | `{ consumer, version, sync, keys }`: the keys a site's code uses |
+| Request                                 | Does                                                                                                           |
+| --------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `GET /v1/translations/:project/draft`   | `{ version, source, texts, changesets }`, every language as it is now, and the open changesets adding each key |
+| `GET …/:project/draft/keys.d.ts`        | the draft's keys, typed                                                                                        |
+| `GET …/draft…?changeset=<name>`         | the same, with that changeset laid over the draft                                                              |
+| `POST /v1/translations/:project/report` | `{ consumer, version, sync, keys }`: the keys a site's code uses                                               |
 
 A project takes 60 reports an hour (then `429`) and keeps 50 consumers: a report from a new one
 beyond that is a `409` until one is forgotten under Sites.
+
+## Changesets
+
+A feature that needs new or changed texts gets a changeset, named like its branch
+(`feat/checkout`). It is a work order: per key, add it, update its note and texts (the languages
+left out keep theirs), or remove it. Nothing in it reaches the draft, let alone sites, until the
+owner applies it under Changesets on the Translations page; then it is published as usual.
+
+1. Start the changeset, on the page or by an assistant (`create_changeset`).
+2. Write into it while the feature is built: on its page, or by an assistant passing `changeset`
+   to `save_keys`, `translate` and `delete_keys`. A key holds one change; texts written later, a
+   language at a time, merge in. An update keeps only what differs from the draft.
+3. Develop against it: `sync --changeset feat/checkout`.
+4. CI fails on keys that are only in the changeset, naming it, until it is applied and published.
+5. Apply, then publish, then merge and deploy the feature.
+
+Applying writes every change at once, or nothing when the draft changed under one (a key added
+meanwhile, one updated that is gone, a text it changes that changed since). A removal of a key a
+site's code still uses waits, and the changeset stays open for it, until a build reports the key
+unused, or the owner removes it all the same. An update reaches sites with the next publish,
+before the feature deploys: for a text whose meaning changes with the feature, add a new key and
+remove the old one.
 
 ## Import and export
 
@@ -201,14 +228,19 @@ claude mcp add --transport http linguitas https://nexitas.example.com/v1/transla
   --header "Authorization: Bearer <MCP token>"
 ```
 
-| Tool           | Does                                                                                 |
-| -------------- | ------------------------------------------------------------------------------------ |
-| `list_keys`    | The languages, and every key with its note and source text; with `locale`, its audit |
-| `get_key`      | One key in every language                                                            |
-| `save_keys`    | Create keys or change their note and texts, up to 200 at a time; returns the audit   |
-| `translate`    | What translating keys into a language takes: source, note, placeholders, a glossary  |
-| `add_language` | Add a draft language                                                                 |
-| `delete_keys`  | Delete keys with their notes and texts, up to 200 at a time (they cannot come back)  |
+| Tool               | Does                                                                                 |
+| ------------------ | ------------------------------------------------------------------------------------ |
+| `list_keys`        | The languages, and every key with its note and source text; with `locale`, its audit |
+| `get_key`          | One key in every language                                                            |
+| `save_keys`        | Create keys or change their note and texts, up to 200 at a time; returns the audit   |
+| `translate`        | What translating keys into a language takes: source, note, placeholders, a glossary  |
+| `add_language`     | Add a draft language                                                                 |
+| `delete_keys`      | Delete keys with their notes and texts, up to 200 at a time (they cannot come back)  |
+| `create_changeset` | Start a changeset for a feature's key changes                                        |
+| `list_changesets`  | The changesets; with `name`, its changes                                             |
+
+With `changeset`, `list_keys`, `get_key` and `translate` read the draft with that changeset laid
+over it, and `save_keys` and `delete_keys` write into it instead of the draft.
 
 **The assistant translates, not linguitas.** `translate` gives it each key's source text, its
 note (where the text appears, so it decides the wording and the length), the placeholders to keep,
@@ -226,21 +258,27 @@ the token, and never to a page: a request with an `Origin` is refused.
 The admin pages use it, under the owner's session; writes come from nexitas' own origin, like every
 `/api` route. All paths start with `/api/p/:project/translations`.
 
-| Request                                   | Does                                                                |
-| ----------------------------------------- | ------------------------------------------------------------------- |
-| `GET · POST /`                            | Languages, keys and texts, `404` before it starts · start           |
-| `POST /languages`                         | Add a draft language `{ locale }`                                   |
-| `POST /languages/:locale`                 | Put it live or take it offline `{ live }`                           |
-| `POST …/:locale/source` · `…/delete`      | Make a live one the source · remove a draft                         |
-| `POST /import/preview`                    | What files would change `{ files: [{ name, locale?, content }] }`   |
-| `POST /import`                            | Write picked changes `{ entries: [{ key, locale \| null, text }] }` |
-| `GET /export?locales=&prefix=&needs=`     | A linguitas file to download                                        |
-| `POST /publish` · `POST /token`           | Publish the texts as they are · replace the build token             |
-| `POST /mcp`                               | Assistant access `{ on }`: a new MCP token, or none                 |
-| `POST /versions/:version/publish`         | Publish an earlier version again, as the next one                   |
-| `POST /consumers/:consumer/delete`        | Forget a site, so its keys stop counting as used                    |
-| `POST /keys`                              | Add one `{ key, note, texts: { [locale]: text } }`                  |
-| `GET · POST /keys/:key` · `POST …/delete` | Read · replace `{ note, texts, confirmed: [locale] }` · delete      |
+| Request                                      | Does                                                                |
+| -------------------------------------------- | ------------------------------------------------------------------- |
+| `GET · POST /`                               | Languages, keys and texts, `404` before it starts · start           |
+| `POST /languages`                            | Add a draft language `{ locale }`                                   |
+| `POST /languages/:locale`                    | Put it live or take it offline `{ live }`                           |
+| `POST …/:locale/source` · `…/delete`         | Make a live one the source · remove a draft                         |
+| `POST /import/preview`                       | What files would change `{ files: [{ name, locale?, content }] }`   |
+| `POST /import`                               | Write picked changes `{ entries: [{ key, locale \| null, text }] }` |
+| `GET /export?locales=&prefix=&needs=`        | A linguitas file to download                                        |
+| `POST /publish` · `POST /token`              | Publish the texts as they are · replace the build token             |
+| `POST /mcp`                                  | Assistant access `{ on }`: a new MCP token, or none                 |
+| `POST /versions/:version/publish`            | Publish an earlier version again, as the next one                   |
+| `POST /consumers/:consumer/delete`           | Forget a site, so its keys stop counting as used                    |
+| `POST /keys`                                 | Add one `{ key, note, texts: { [locale]: text } }`                  |
+| `GET · POST /keys/:key` · `POST …/delete`    | Read · replace `{ note, texts, confirmed: [locale] }` · delete      |
+| `GET · POST /changesets`                     | The changesets · start one `{ name, note }`                         |
+| `GET /changesets/:name`                      | Its changes, the keys before and after, conflicts, held removals    |
+| `POST /changesets/:name/changes`             | Write `{ changes: [{ op: add \| update \| remove, key, … }] }`      |
+| `POST …/:name/drop` · `…/apply` · `…/delete` | Drop a key's change `{ key }` · apply `{ removeUsed }` · delete     |
+
+A changeset's name goes in the path encoded: `feat%2Fcheckout`.
 
 An empty text removes it. Deleting a project in nexitas deletes its translations with it.
 
